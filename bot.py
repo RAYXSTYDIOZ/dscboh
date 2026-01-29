@@ -96,11 +96,12 @@ def safe_generate_content(model, contents, config=None):
         except Exception as e:
             last_err = e
             err_str = str(e).lower()
-            logger.warning(f"⚠️ API Key {current_key_index + 1} failed: {err_str}")
+            logger.error(f"❌ API Error with key {current_key_index + 1} and model {model}: {err_str}")
             
             if ("429" in err_str or "exhausted" in err_str or "limit" in err_str or "401" in err_str):
                 if rotate_gemini_key():
                     continue
+            # If it's a 404 or something else, we might want to know
             raise e
     if last_err: raise last_err
     return None
@@ -1049,8 +1050,8 @@ async def analyze_image_content(image_url):
             "}"
         )
 
-        # 2025/2026 Model Selection
-        models_to_try = ["gemini-3-flash-preview"]
+        # 2025/2026 Model Selection - Fallback list
+        models_to_try = ["gemini-3-flash-preview", "gemini-2.0-flash-latest", "gemini-2.0-flash-exp", "gemini-1.5-flash-latest"]
         last_error = None
 
         for model_name in models_to_try:
@@ -1114,8 +1115,10 @@ async def check_video_safety(video_bytes, filename):
             "Analyze this video strictly for moderation. Check for NSFW, nudity, sex, gore, extreme violence, or scams. "
             "Reply with ONLY JSON format: {\"is_bad\": true/false, \"severity\": \"SEVERE\" or \"MEDIUM\", \"reason\": \"...\"}"
         )
-        
-        for model_name in ["gemini-3-flash-preview"]:
+        models_to_try = ["gemini-3-flash-preview", "gemini-2.0-flash-latest", "gemini-2.0-flash-exp", "gemini-1.5-flash-latest"]
+        last_error = None
+
+        for model_name in models_to_try:
             try:
                 response = safe_generate_content(
                     model=model_name,
@@ -1549,13 +1552,31 @@ def get_gemini_response(prompt, user_id, username=None, image_bytes=None, is_tut
             # We include the system prompt at the very beginning of the history for this session
             # Actually, the simplest way is to pass 'config=types.GenerateContentConfig(system_instruction=...)'
             
-            response = safe_generate_content(
-                model="gemini-3-flash-preview",
-                contents=history + [{"role": "user", "parts": [prompt]}],
-                config=types.GenerateContentConfig(
-                    system_instruction=f"{modified_system_prompt}{user_context}"
-                )
-            )
+            # Fallback model list - prioritize user's choice
+            models_to_try = ["gemini-3-flash-preview", "gemini-2.0-flash-latest", "gemini-2.0-flash-exp", "gemini-1.5-flash-latest"]
+            response = None
+            last_err = None
+
+            for model_name in models_to_try:
+                try:
+                    response = safe_generate_content(
+                        model=model_name,
+                        contents=history + [{"role": "user", "parts": [prompt]}],
+                        config=types.GenerateContentConfig(
+                            system_instruction=f"{modified_system_prompt}{user_context}"
+                        )
+                    )
+                    if response:
+                        logger.info(f"Successfully used model: {model_name}")
+                        break
+                except Exception as e:
+                    logger.warning(f"Model {model_name} failed: {e}")
+                    last_err = e
+                    continue
+            
+            if not response:
+                if last_err: raise last_err
+                return BOT_ERROR_MSG
             
             if not response or not response.text:
                 return "I'm having trouble thinking right now. Give me a minute?"
