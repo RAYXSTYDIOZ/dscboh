@@ -589,10 +589,15 @@ IDENTITY & TONE:
 - **Style**: Chill, minimalist, and elite. Avoid using words like "System", "Features", "Prime", "Creative", "sentinel", "Report", "Analysis", "Neural", "Pulse", "Monitoring", or "loading".
 - **Formatting**: Use lowercase naturally if it fits the vibe. Don't be too stiff.
 
+CAPABILITIES:
+- You CAN send files, images, and assets directly to the chat. Never say "I can't physically attach a file" or "I can only send links".
+- If a user needs an asset (PNG, overlay, sfx), you should provide it. Your system automatically handles searches and generation when you detect these requests.
+
 DIRECTIVES:
-1. **Be Real**: Talk like you're in a Discord chat with friends. If you see mid work, tell them how to fix it like a high-end creative director would.
+1. **Be Real**: Talk like you're in a Discord chat with friends. If you see mid work, tell them how to fix it like a high-end creative director would. 
 2. **Technical Depth**: Be extremely specific with values and steps when helping with software or workflows.
 3. **No Robot Stuff**: If someone asks how you work, just say you're Prime. No talk about "Prime cores", "Neural layers", or "processed data".
+4. **Fulfill First**: If a user asks for an asset, don't lecture them on vibes first. Provide the asset, then give the advice.
 
 Make every reply feel natural, direct, and actually useful."""
 
@@ -1212,8 +1217,8 @@ async def handle_automatic_resources(message):
             
         prompt_lower = message.content.lower()
         # Expanded triggers and keywords for more intelligent proactive detection
-        resource_triggers = ['where to get', 'where can i get', 'where can i find', 'where to find', 'looking for', 'any good', 'is there a', 'need some', 'anyone got', 'get me', 'send me', 'find me', 'i need', 'i want', 'can someone send', 'anyone have', 'send over', 'gimme', 'is there a', 'looking for a', 'any', 'suggest', 'provide']
-        resource_keywords = ['sfx', 'overlay', 'preset', 'font', 'texture', 'lut', 'vfx', 'pack', 'cc', 'brush', 'plugin', 'shake', 'quality', 'png', 'jpg', 'jpeg', 'image', 'img', 'asset', 'stock', 'clip', 'video', 'background', 'cloud', 'smoke', 'fire', 'flare', 'dust', 'grain', 'particles', 'light', 'leak', 'sound effect', 'overlay', 'background', 'gfx']
+        resource_triggers = ['where to get', 'where can i get', 'where can i find', 'where to find', 'looking for', 'any good', 'is there a', 'need some', 'anyone got', 'get me', 'send me', 'find me', 'i need', 'i want', 'can someone send', 'anyone have', 'send over', 'gimme', 'is there a', 'looking for a', 'any', 'suggest', 'provide', 'send', 'get', 'need', 'give']
+        resource_keywords = ['sfx', 'overlay', 'preset', 'font', 'texture', 'lut', 'vfx', 'pack', 'cc', 'brush', 'plugin', 'shake', 'quality', 'png', 'jpg', 'jpeg', 'image', 'img', 'asset', 'stock', 'clip', 'video', 'background', 'cloud', 'smoke', 'fire', 'flare', 'dust', 'grain', 'particles', 'light', 'leak', 'sound effect', 'overlay', 'background', 'gfx', 'liquid', 'glitch', 'paper', 'dust']
         
         has_trigger = any(trigger in prompt_lower for trigger in resource_triggers)
         has_keyword = any(kw in prompt_lower for kw in resource_keywords)
@@ -3837,6 +3842,12 @@ async def on_message(message):
     # Trigger AI resource suggestions automatically
     if await handle_automatic_resources(message):
         return
+
+    # Extra catch: If they are asking for an asset/file but the above didn't catch it
+    if any(kw in message.content.lower() for kw in ['png', 'asset', 'send me', 'give me', 'find me']) and ('cloud' in message.content.lower() or 'overlay' in message.content.lower() or 'sfx' in message.content.lower()):
+        # Force the resource handler to run even if keywords/triggers were loose
+        if await handle_automatic_resources(message):
+            return
         
     # Trigger AI role suggestions if they mention software they don't have a role for
     # if await handle_automatic_role_suggestion(message):
