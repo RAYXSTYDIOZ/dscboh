@@ -136,7 +136,7 @@ class DatabaseManager:
                     (user_id, limit)
                 )
                 rows = cursor.fetchall()
-                return [{"role": row[0], "parts": [row[1]]} for row in reversed(rows)]
+                return [{"role": row[0], "parts": [{"text": row[1]}]} for row in reversed(rows)]
         except Exception as e:
             logger.error(f"Error getting history from DB: {e}")
             return []

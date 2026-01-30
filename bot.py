@@ -1132,7 +1132,7 @@ async def check_video_safety(video_bytes, filename):
                     model=model_name,
                     contents=[
                         types.Part.from_bytes(data=video_bytes, mime_type=mime_type),
-                        prompt
+                        types.Part.from_text(text=prompt)
                     ],
                     config=types.GenerateContentConfig(
                         response_mime_type="application/json",
@@ -1469,7 +1469,7 @@ Be specific with menu locations and techniques. Assume the user is editing in Ad
                     data=video_bytes,
                     mime_type=mime_type,
                 ),
-                analysis_prompt,
+                types.Part.from_text(text=analysis_prompt),
             ],
         )
         
@@ -1532,7 +1532,7 @@ def get_gemini_response(prompt, user_id, username=None, image_bytes=None, is_tut
                         data=image_bytes,
                         mime_type="image/jpeg",
                     ),
-                    image_prompt,
+                    types.Part.from_text(text=image_prompt),
                 ],
             )
             
@@ -1574,9 +1574,12 @@ def get_gemini_response(prompt, user_id, username=None, image_bytes=None, is_tut
 
             for model_name in models_to_try:
                 try:
+                    # Prepare contents list
+                    current_contents = history + [{"role": "user", "parts": [{"text": prompt}]}]
+                    
                     response = safe_generate_content(
                         model=model_name,
-                        contents=history + [{"role": "user", "parts": [prompt]}],
+                        contents=current_contents,
                         config=types.GenerateContentConfig(
                             system_instruction=f"{modified_system_prompt}{user_context}"
                         )
@@ -1633,7 +1636,7 @@ async def reflect_on_user(user_id, username, latest_user_msg, latest_bot_res):
         
         # Load recent history to give context for reflection
         history = db_manager.get_history(user_id, limit=6)
-        history_text = "\n".join([f"{m['role']}: {m['parts'][0]}" for m in history])
+        history_text = "\n".join([f"{m['role']}: {m['parts'][0]['text']}" for m in history])
 
         reflection_prompt = f"""
         You are reflecting on your relationship with a user named {username}.
@@ -2413,11 +2416,11 @@ async def verify_youtube_proof(message, min_subs):
         }}
         """
         
-        response = gemini_client.models.generate_content(
+        response = safe_generate_content(
             model="gemini-3-flash-preview",
             contents=[
                 types.Part.from_bytes(data=image_bytes, mime_type="image/jpeg"),
-                prompt
+                types.Part.from_text(text=prompt)
             ]
         )
         
