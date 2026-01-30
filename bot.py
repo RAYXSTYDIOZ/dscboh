@@ -68,7 +68,7 @@ else:
     logger.error("❌ CRITICAL: NO API KEY DETECTED. Check Railway Variables for 'Gemini_key'.")
 
 # --- GLOBAL CONFIGURATION ---
-PRIMARY_MODEL = "gemini-3-flash-preview"
+PRIMARY_MODEL = "gemini-1.5-flash"
 SECRET_LOG_CHANNEL_ID = 1456312201974644776
 
 if not GEMINI_KEYS:
@@ -89,7 +89,7 @@ def rotate_gemini_key():
     return True
 
 # Fallback configuration
-FALLBACK_MODEL = "gemini-1.5-flash-latest"
+FALLBACK_MODEL = "gemini-1.5-pro"
 
 def safe_generate_content(model, contents, config=None):
     """Wrapper to handle API key rotation on rate limits and automatic model fallback."""
@@ -2027,10 +2027,9 @@ def get_gemini_response(prompt, user_id, username=None, image_bytes=None, is_tut
             # Fallback model list - prioritize user's choice and use standard names
             models_to_try = [model] if model else [
                 PRIMARY_MODEL,
-                "gemini-2.0-flash-exp", 
-                "gemini-1.5-pro-latest",
-                "gemini-1.5-flash-latest",
-                "gemini-1.5-flash-8b"
+                "gemini-1.5-flash",
+                "gemini-1.5-pro",
+                "gemini-1.0-pro"
             ]
             
             attempt_log = []
