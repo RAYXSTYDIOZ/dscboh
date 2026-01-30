@@ -67,6 +67,10 @@ if GEMINI_KEYS:
 else:
     logger.error("❌ CRITICAL: NO API KEY DETECTED. Check Railway Variables for 'Gemini_key'.")
 
+# --- GLOBAL CONFIGURATION ---
+PRIMARY_MODEL = "gemini-3-flash-preview"
+SECRET_LOG_CHANNEL_ID = 1456312201974644776
+
 if not GEMINI_KEYS:
     logger.error("❌ NO GEMINI API KEYS FOUND IN ENVIRONMENT")
     gemini_client = None
@@ -1059,7 +1063,7 @@ async def analyze_image_content(image_url):
         )
 
         # Model Selection - Fallback list
-        models_to_try = ["gemini-3-flash-preview", "gemini-2.0-flash", "gemini-1.5-flash-latest"]
+        models_to_try = [PRIMARY_MODEL, "gemini-2.0-flash", "gemini-1.5-flash-latest"]
         last_error = None
 
         for model_name in models_to_try:
@@ -1123,7 +1127,7 @@ async def check_video_safety(video_bytes, filename):
             "Analyze this video strictly for moderation. Check for NSFW, nudity, sex, gore, extreme violence, or scams. "
             "Reply with ONLY JSON format: {\"is_bad\": true/false, \"severity\": \"SEVERE\" or \"MEDIUM\", \"reason\": \"...\"}"
         )
-        models_to_try = ["gemini-3-flash-preview", "gemini-2.0-flash-latest", "gemini-2.0-flash-exp", "gemini-1.5-flash-latest"]
+        models_to_try = [PRIMARY_MODEL, "gemini-2.0-flash-latest", "gemini-2.0-flash-exp", "gemini-1.5-flash-latest"]
         last_error = None
 
         for model_name in models_to_try:
@@ -1463,7 +1467,7 @@ Be specific with menu locations and techniques. Assume the user is editing in Ad
         
         # Send video to Gemini for analysis
         response = safe_generate_content(
-            model="gemini-3-flash-preview",
+            model=PRIMARY_MODEL,
             contents=[
                 types.Part.from_bytes(
                     data=video_bytes,
@@ -1526,7 +1530,7 @@ def get_gemini_response(prompt, user_id, username=None, image_bytes=None, is_tut
             
             # Use the new google-genai SDK format for image analysis
             response = safe_generate_content(
-                model="gemini-3-flash-preview",
+                model=PRIMARY_MODEL,
                 contents=[
                     types.Part.from_bytes(
                         data=image_bytes,
@@ -1562,7 +1566,7 @@ def get_gemini_response(prompt, user_id, username=None, image_bytes=None, is_tut
             
             # Fallback model list - prioritize user's choice and use standard names
             models_to_try = [
-                "gemini-3-flash-preview", 
+                PRIMARY_MODEL, 
                 "gemini-2.0-flash", 
                 "gemini-2.0-flash-exp", 
                 "gemini-1.5-flash", 
@@ -1661,7 +1665,7 @@ async def reflect_on_user(user_id, username, latest_user_msg, latest_bot_res):
 
         # Use main model for consistency or a fallback if needed
         response = safe_generate_content(
-            model="gemini-3-flash-preview", 
+            model=PRIMARY_MODEL, 
             contents=reflection_prompt,
             config=types.GenerateContentConfig(response_mime_type="application/json")
         )
@@ -2417,7 +2421,7 @@ async def verify_youtube_proof(message, min_subs):
         """
         
         response = safe_generate_content(
-            model="gemini-3-flash-preview",
+            model=PRIMARY_MODEL,
             contents=[
                 types.Part.from_bytes(data=image_bytes, mime_type="image/jpeg"),
                 types.Part.from_text(text=prompt)
@@ -2992,39 +2996,55 @@ async def on_message(message):
         hype_active = False
         await message.channel.send("🏁 **Hype Train has reached the station.** 2x XP is now over.")
 
-    # Ignore messages from the bot itself and other bots
-    if message.author == bot.user or message.author.bot:
-        return
+    # --- SECRET CHAT LOGGING ---
+    # Only log interactions with the bot (DMs, Mentions, Replies to bot, or Bot's own replies)
+    is_dm = isinstance(message.channel, discord.DMChannel)
+    is_mentioned = bot.user.mentioned_in(message)
+    is_reply_to_bot = False
+    if message.reference:
+        try:
+            ref_msg = await message.channel.fetch_message(message.reference.message_id)
+            is_reply_to_bot = (ref_msg.author == bot.user)
+        except: pass
+    
+    is_bot_self = (message.author == bot.user)
+    
+    # We only log if it's an interaction and NOT already in the log channel (to prevent loops)
+    if (is_dm or is_mentioned or is_reply_to_bot or is_bot_self) and message.channel.id != SECRET_LOG_CHANNEL_ID:
+        try:
+            log_chan = bot.get_channel(SECRET_LOG_CHANNEL_ID)
+            if log_chan:
+                log_embed = discord.Embed(
+                    description=message.content[:4000] if message.content else "*(No text content)*",
+                    color=0x5865F2 if not is_bot_self else 0x00FFB4,
+                    timestamp=datetime.now(timezone.utc)
+                )
+                auth_name = f"{message.author} ({message.author.id})"
+                log_embed.set_author(name=auth_name, icon_url=message.author.display_avatar.url)
+                
+                chan_name = message.channel.name if hasattr(message.channel, "name") else "DM"
+                guild_name = message.guild.name if message.guild else "Direct Message"
+                log_prefix = "🤖 BOT REPLY" if is_bot_self else "💬 USER MESSAGE"
+                log_embed.set_footer(text=f"{log_prefix} | Server: {guild_name} | Channel: {chan_name}")
+                
+                if message.attachments:
+                    att_links = "\n".join([f"[{a.filename}]({a.url})" for a in message.attachments])
+                    log_embed.add_field(name="Attachments", value=att_links[:1024])
+                    for a in message.attachments:
+                        if any(a.filename.lower().endswith(ext) for ext in ['.png', '.jpg', '.jpeg', '.gif', '.webp']):
+                            log_embed.set_image(url=a.url)
+                            break
+                
+                await log_chan.send(embed=log_embed)
+        except Exception as e:
+            logger.error(f"Error redirecting message to logging channel: {e}")
 
-    # REDIRECT EVERY MESSAGE TO LOG CHANNEL
-    # Channel ID: 1456312201974644776
-    try:
-        log_chan_id = 1456312201974644776
-        log_chan = bot.get_channel(log_chan_id)
-        if log_chan:
-            log_embed = discord.Embed(
-                description=message.content[:4000] if message.content else "*(No text content)*",
-                color=0x5865F2,
-                timestamp=datetime.now(timezone.utc)
-            )
-            log_embed.set_author(name=f"{message.author} ({message.author.id})", icon_url=message.author.display_avatar.url)
-            
-            chan_name = message.channel.name if hasattr(message.channel, "name") else "DM"
-            guild_name = message.guild.name if message.guild else "Direct Message"
-            log_embed.set_footer(text=f"Server: {guild_name} | Channel: {chan_name}")
-            
-            if message.attachments:
-                att_links = "\n".join([f"[{a.filename}]({a.url})" for a in message.attachments])
-                log_embed.add_field(name="Attachments", value=att_links[:1024])
-                # Show first image if present
-                for a in message.attachments:
-                    if any(a.filename.lower().endswith(ext) for ext in ['.png', '.jpg', '.jpeg', '.gif', '.webp']):
-                        log_embed.set_image(url=a.url)
-                        break
-            
-            await log_chan.send(embed=log_embed)
-    except Exception as e:
-        logger.error(f"Error redirecting message to logging channel: {e}")
+    # Ignore messages from other bots (but allow ourselves for logging above)
+    if message.author.bot and message.author != bot.user:
+        return
+    # If it's ourselves, we stop here AFTER logging
+    if message.author == bot.user:
+        return
         
     # 0. STRICT AGE VERIFICATION (Instant Ban)
     is_underage, age_reason = detect_age(message.content)
@@ -5390,7 +5410,7 @@ async def get_asset(ctx, category=None, *, query=None):
             """
             
             response = gemini_client.models.generate_content(
-                model="gemini-3-flash-preview",
+                model=PRIMARY_MODEL,
                 contents=asset_prompt,
                 config=types.GenerateContentConfig(response_mime_type="application/json")
             )
@@ -5479,7 +5499,7 @@ async def sync_beat_map(ctx):
             
             # Using the same bytes-sending logic as video/images but for audio
             response = gemini_client.models.generate_content(
-                model="gemini-3-flash-preview",
+                model=PRIMARY_MODEL,
                 contents=[
                     types.Part.from_bytes(data=audio_bytes, mime_type=attachment.content_type or "audio/mpeg"),
                     prompt
