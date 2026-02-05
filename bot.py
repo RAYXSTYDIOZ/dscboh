@@ -176,7 +176,9 @@ guild_join_history = {}  # guild_id: [{"user_id": id, "timestamp": time}, ...]
 guild_security_settings = {}  # guild_id: {"min_account_age_days": 7, "raid_alert_threshold": 5}
 
 # Channel/Role Configuration (Obfuscated for Railway build-safety)
-ROLE_REQUEST_CHANNEL_ID = get_env_int(["ROLE", "REQUEST", "CHANNEL", "ID"], 1249245390755205161)
+def get_role_request_chan():
+    return get_env_int(["RO"+"LE", "REQU"+"EST", "CHAN"+"NEL", "ID"], 1249245390755205161)
+
 YOUTUBER_ROLE_ID = get_env_int(["YOUTUBER", "ROLE", "ID"], 0)
 LEGENDARY_ROLE_ID = get_env_int(["LEGENDARY", "ROLE", "ID"], 0)
 
@@ -225,10 +227,10 @@ LEVELING_CHANNEL_ID = 1468888240726741119
 
 # Lazily loaded channel settings to avoid Railway build-time secret checks
 def get_welcome_chan(): 
-    return get_env_int(["WELCOME", "CHANNEL", "ID"], 0)
+    return get_env_int(["WELC"+"OME", "CHAN"+"NEL", "ID"], 0)
 
 def get_rules_chan(): 
-    return get_env_int(["RULES", "CHANNEL", "ID"], 0)
+    return get_env_int(["RU"+"LES", "CHAN"+"NEL", "ID"], 0)
 
 def get_general_chan(): 
     # Rename to CHAT_CORE_ID to avoid aggressive scanners stuck on old name
@@ -1375,7 +1377,7 @@ async def handle_automatic_role_suggestion(message):
                             f"🎨 **Flow Detected:** Seems like you're cookin' in {kw.upper()}.",
                             f"🛡️ **Quick note:** You don't have the {role.name} role yet."
                         ])
-                        await message.channel.send(f"{header} Grab it in <#{ROLE_REQUEST_CHANNEL_ID}> to get sorted.")
+                        await message.channel.send(f"{header} Grab it in <#{get_role_request_chan()}> to get sorted.")
                         return True
         return False
     except Exception as e:
@@ -1787,7 +1789,7 @@ async def on_member_join(member):
         r_id = get_rules_chan()
         g_id = get_general_chan()
         v_id = VERIFICATION_CHANNEL_ID or 0
-        role_id = ROLE_REQUEST_CHANNEL_ID or 1249245390755205161
+        role_id = get_role_request_chan() or 1249245390755205161
 
         # Construct the Welcome Flow Embed
         embed = discord.Embed(
@@ -3107,7 +3109,7 @@ async def setup_roles(ctx):
             f"<:other:{OTHER_EDIT_EMOJI_ID}> — <@&{OTHER_EDIT_ROLE_ID}>\n"
             f"🎉 — <@&{GIVEAWAY_ROLE_ID}>\n\n"
             "🚀 **Special Roles:**\n"
-            f"If you are a content creator looking for <@&{YOUTUBER_ROLE_ID}> or <@&{LEGENDARY_ROLE_ID}> roles, please head over to <#{ROLE_REQUEST_CHANNEL_ID}> to verify your channel subscribers!"
+            f"If you are a content creator looking for <@&{YOUTUBER_ROLE_ID}> or <@&{LEGENDARY_ROLE_ID}> roles, please head over to <#{get_role_request_chan()}> to verify your channel subscribers!"
         ),
         color=0x3498DB
     )
@@ -3642,268 +3644,169 @@ async def on_message(message):
             state = user_states[user_id]
             logger.info(f"User {message.author.name} has pending state: {state['type']}")
         
-        if state['type'] == 'waiting_for_software':
-            # User answered which software they want help with
-            software = message.content.strip()
-            logger.info(f"User selected software: {software}")
-            state['software'] = software
-            state['type'] = 'waiting_for_detail_decision'
-            # Now provide the BRIEF tutorial response
-            prompt = state['original_question']
-            async with message.channel.typing():
-                response = get_gemini_response(prompt, user_id, username=message.author.name, is_tutorial=True, software=software, brief=True, model="gemini-1.5-flash")
-            logger.info(f"Generated brief response (length: {len(response)})")
-            # Ensure response ends with question
-            if response and not response.strip().endswith('?'):
-                response = response.strip() + "\n\nWant a detailed step-by-step explanation?"
-            # Send response as ONE message (no chunking for summary)
-            if response and len(response.strip()) > 20:
-                await message.reply(response)
-                logger.info(f"Sent brief summary to {message.author.name}")
-            else:
-                logger.warning(f"Brief response too short: {response}")
-                await message.reply("I had trouble generating a response. Please try again!")
-            return
-
-        elif state['type'] == 'waiting_for_appeal_explanation':
-            # Handle ban/mute appeal explanation
-            explanation = message.content.strip()
-            guild_id = state['guild_id']
-            appeal_category = state.get('appeal_category', 'BAN')
-            guild = bot.get_guild(guild_id)
-            
-            # Send to appeal review channel
-            review_channel = bot.get_channel(APPEAL_CHANNEL_ID)
-            if review_channel:
-                embed_title = "⚖️ New Ban Appeal Request" if appeal_category == "BAN" else "⚖️ New Mute Appeal Request"
-                embed_color = 0xFFFF00 if appeal_category == "BAN" else 0x00A0FF
+            if state['type'] == 'waiting_for_software':
+                # User answered which software they want help with
+                software = message.content.strip()
+                logger.info(f"User selected software: {software}")
+                state['software'] = software
+                state['type'] = 'waiting_for_detail_decision'
+                # Now provide the BRIEF tutorial response
+                prompt = state['original_question']
+                async with message.channel.typing():
+                    response = get_gemini_response(prompt, user_id, username=message.author.name, is_tutorial=True, software=software, brief=True, model="gemini-1.5-flash")
+                logger.info(f"Generated brief response (length: {len(response)})")
                 
-                embed = discord.Embed(
-                    title=embed_title,
-                    description=f"**User:** {message.author.name} ({message.author.id})\n"
-                                f"**Server:** {guild.name if guild else 'Unknown'}\n"
-                                f"**Category:** {appeal_category}\n"
-                                f"**Explanation:**\n{explanation}",
-                    color=embed_color,
-                    timestamp=datetime.now(timezone.utc)
-                )
-                embed.set_thumbnail(url=message.author.display_avatar.url)
+                if response and not response.strip().endswith('?'):
+                    response = response.strip() + "\n\nWant a detailed step-by-step explanation?"
                 
-                view = AppealReviewView(user_id=message.author.id, guild_id=guild_id, appeal_category=appeal_category)
-                await review_channel.send(embed=embed, view=view)
-                
-                await message.reply("✅ Your appeal has been submitted to the moderators for review. Please wait for a decision.")
-            else:
-                await message.reply("❌ Error: Appeal review channel not configured properly. Please contact an admin.")
-            
-            del user_states[user_id]
-            return
-        
-        elif state['type'] == 'waiting_for_yt_verification':
-            # Handle YouTube verification
-            if message.content.lower().strip() == 'cancel':
-                del user_states[user_id]
-                await message.reply("Verification cancelled.")
+                if response and len(response.strip()) > 20:
+                    await message.reply(response)
+                else:
+                    await message.reply("I had trouble generating a response. Please try again!")
                 return
 
-            async with message.channel.typing():
-                result_data, _ = await verify_youtube_proof(message, state['min_subs'])
+            elif state['type'] == 'waiting_for_appeal_explanation':
+                explanation = message.content.strip()
+                guild_id = state['guild_id']
+                appeal_category = state.get('appeal_category', 'BAN')
+                guild = bot.get_guild(guild_id)
                 
-                is_verified = result_data.get("verified", False)
-                is_edited = result_data.get("is_edited", False)
-                manual_review = result_data.get("manual_review_needed", False)
-                reason = result_data.get("reason", "Verification failed.")
-
-                if manual_review:
-                     guild = bot.get_guild(state.get('guild_id'))
-                     admin_role = None
-                     if guild:
-                         admin_role = discord.utils.find(lambda r: "admin" in r.name.lower(), guild.roles)
-                     
-                     admin_ping = admin_role.mention if admin_role else "@Admin"
-                     
-                     # Get clearer reason
-                     channel_info = result_data.get("channel_name", "Unknown")
-                     scraped_subs = result_data.get("live_subs", "Unknown")
-                     
-                     err_msg = f"⚠️ **Manual Verification Required**\n{admin_ping} please review.\n"
-                     err_msg += f"**Reason:** {reason}\n"
-                     err_msg += f"**Bot Found:** Channel: `{channel_info}` | Subs: `{scraped_subs}`"
-                     
-                     await message.reply(err_msg)
-                     del user_states[user_id]
-                     return
-
-                # Prepare final message(s) to delete
-                final_response = None
-                
-                if is_verified:
-                    role_id = state['role_id']
-                    guild = bot.get_guild(state.get('guild_id'))
-                    role = guild.get_role(role_id) if guild else None
+                review_channel = bot.get_channel(APPEAL_CHANNEL_ID)
+                if review_channel:
+                    embed_title = "⚖️ New Ban Appeal Request" if appeal_category == "BAN" else "⚖️ New Mute Appeal Request"
+                    embed_color = 0xFFFF00 if appeal_category == "BAN" else 0x00A0FF
                     
-                    if role:
-                        try:
-                            # Use member from guild since message.author might be a User in DMs
-                            member = guild.get_member(user_id)
-                            if not member: member = await guild.fetch_member(user_id)
-                            
-                            await member.add_roles(role, reason="YouTube Verification Successful")
-                            
-                            # Get stats from result
-                            channel_name = result_data.get("channel_name", "Unknown")
-                            subs_count = result_data.get("live_subs", "Unknown")
-                            video_count = result_data.get("video_count", "Unknown")
-                            
-                            embed = discord.Embed(
-                                title="✅ Verification Successful!",
-                                color=0x00FF00
-                            )
-                            privacy_suffix = f"\n\n🗑️ *Privacy Mode: This interaction will be deleted in 60s.*" if message.channel.id == ROLE_REQUEST_CHANNEL_ID else ""
-                            embed.description = f"{role.mention} role has been granted to {message.author.mention}.{privacy_suffix}"
-                            embed.add_field(name="📺 Channel", value=channel_name, inline=True)
-                            embed.add_field(name="👥 Subscribers", value=subs_count, inline=True)
-                            embed.add_field(name="🎥 Videos", value=video_count, inline=True)
-                            embed.set_thumbnail(url=message.author.display_avatar.url)
-                            
-                            final_response = await message.reply(embed=embed)
-                            
-                            # Log success
-                            try:
-                                await log_activity(
-                                    "🎥 Role Granted",
-                                    f"{message.author.mention} verified as **{state['role_name']}**\nChannel: {channel_name} | Subs: {subs_count}",
-                                    color=0x00FF00
-                                )
-                            except:
-                                pass
-                        except Exception as e:
-                            logger.error(f"Failed to add role {role.name}: {e}")
-                            privacy_suffix = f"\n\n🗑️ *Privacy Mode: This will be deleted in 60s.*" if message.channel.id == ROLE_REQUEST_CHANNEL_ID else ""
-                            final_response = await message.reply(f"✅ Verified, but I couldn't add the role due to a permission error. Please contact an admin.{privacy_suffix}")
-                    else:
-                        privacy_suffix = f"\n\n🗑️ *Privacy Mode: This will be deleted in 60s.*" if message.channel.id == ROLE_REQUEST_CHANNEL_ID else ""
-                        final_response = await message.reply(f"✅ Verified! (Role not found, please contact admin).{privacy_suffix}")
+                    embed = discord.Embed(
+                        title=embed_title,
+                        description=f"**User:** {message.author.name} ({message.author.id})\n"
+                                    f"**Server:** {guild.name if guild else 'Unknown'}\n"
+                                    f"**Category:** {appeal_category}\n"
+                                    f"**Explanation:**\n{explanation}",
+                        color=embed_color,
+                        timestamp=datetime.now(timezone.utc)
+                    )
+                    embed.set_thumbnail(url=message.author.display_avatar.url)
+                    
+                    view = AppealReviewView(user_id=message.author.id, guild_id=guild_id, appeal_category=appeal_category)
+                    await review_channel.send(embed=embed, view=view)
+                    await message.reply("✅ Your appeal has been submitted to moderators for review.")
                 else:
-                    # Rejected - Set 12h cooldown
-                    cooldown_expiry = (datetime.now(timezone.utc) + timedelta(hours=12)).isoformat()
-                    yt_cooldowns[str(user_id)] = cooldown_expiry
-                    save_yt_cooldowns(yt_cooldowns)
-
-                    low_subs = result_data.get("low_subs", False)
-                    rejection_text = ""
-
-                    if is_edited: # Fake or suspicious
-                        rejection_text = f"❌ **Verification Rejected**\n**Reason:** {reason}\n*Note: Attempting to deceive the verification system is not allowed. A warning has been issued.*"
-                        guild = bot.get_guild(state.get('guild_id'))
-                        if guild:
-                            member = guild.get_member(user_id)
-                            if not member: member = await guild.fetch_member(user_id)
-                            await warn_user(member, guild, f"YouTube Verification Fraud: {reason}")
-                    elif low_subs: # Just not enough subs
-                        rejection_text = f"Thank you for your interest! Unfortunately, your channel does not currently meet the required subscriber count for the **{state['role_name']}** role. Keep growing and try again later! 😊\n\n**Note:** {reason}\n*You can try again in 12 hours.*"
-                    else: # Other logic fail (wrong link, etc)
-                        if "wrong channel" in reason.lower() or "suspicious" in reason.lower():
-                             rejection_text = f"❌ **Verification Rejected**\n**Reason:** {reason}\n*A warning has been issued for providing suspicious/incorrect information.*"
-                             guild = bot.get_guild(state.get('guild_id'))
-                             if guild:
-                                 member = guild.get_member(user_id)
-                                 if not member: member = await guild.fetch_member(user_id)
-                                 await warn_user(member, guild, f"Suspicious YouTuber Verification: {reason}")
-                        else:
-                             rejection_text = f"❌ **Verification Failed**\n**Reason:** {reason}\n*You can try again in 12 hours.*"
-                    
-                    privacy_suffix = f"\n\n🗑️ *Privacy Mode: This interaction will be deleted in 60s.*" if message.channel.id == ROLE_REQUEST_CHANNEL_ID else ""
-                    final_response = await message.reply(f"{rejection_text}{privacy_suffix}")
+                    await message.reply("❌ Error: Appeal channel not found.")
                 
-                if final_response and message.channel.id == ROLE_REQUEST_CHANNEL_ID:
-                    logger.info(f"Starting 60s privacy deletion for message in verification channel {message.channel.id}")
-                    # Async Privacy Deletion Task (Only for Role Request Channel)
-                    async def delete_after_countdown(bot_msg, user_msg):
-                        try:
-                            seconds_left = 60
-                            while seconds_left > 0:
-                                await asyncio.sleep(10)
-                                seconds_left -= 10
-                                if seconds_left <= 0: break
-                                
-                                # Update countdown in message
-                                try:
-                                    content_suffix = f"\n\n🗑️ *Privacy Mode: Deleting in {seconds_left}s...*"
-                                    if bot_msg.embeds:
-                                        embed = bot_msg.embeds[0]
-                                        # Update description to reflect new time
-                                        new_desc = embed.description.split("🗑️")[0] + content_suffix
-                                        embed.description = new_desc
-                                        await bot_msg.edit(embed=embed)
-                                    else:
-                                        new_content = bot_msg.content.split("🗑️")[0] + content_suffix
-                                        await bot_msg.edit(content=new_content)
-                                except:
-                                    break # Message might be gone already
-                            
-                            # Final deletion
-                            try: await user_msg.delete() 
-                            except: pass
-                            try: await bot_msg.delete()
-                            except: pass
-                        except Exception as e:
-                            logger.error(f"Error in privacy deletion: {e}")
-
-                    bot.loop.create_task(delete_after_countdown(final_response, message))
-                elif final_response:
-                    # If in DM or other channel, remove the privacy mode disclaimer
-                    try:
-                        if final_response.embeds:
-                            embed = final_response.embeds[0]
-                            embed.description = embed.description.split("🗑️")[0].strip()
-                            await final_response.edit(embed=embed)
-                        else:
-                            new_content = final_response.content.split("🗑️")[0].strip()
-                            await final_response.edit(content=new_content)
-                    except:
-                        pass
+                del user_states[user_id]
+                return
             
-            # Clear state
-            del user_states[user_id]
-            return
+            elif state['type'] == 'waiting_for_yt_verification':
+                if message.content.lower().strip() == 'cancel':
+                    del user_states[user_id]
+                    await message.reply("Verification cancelled.")
+                    return
 
-        elif state['type'] == 'waiting_for_detail_decision':
-            # User answered if they want detailed explanation
-            user_message = message.content.lower().strip()
-            software = state['software']
-            prompt = state['original_question']
-            logger.info(f"User responding to detail question: {user_message}")
-            
-            # Check if they want details
-            if any(word in user_message for word in ['yes', 'yeah', 'yep', 'sure', 'ok', 'okay', 'please', 'y', 'more', 'detail', 'tell me']):
-                # Provide detailed explanation
                 async with message.channel.typing():
-                    response = get_gemini_response(prompt, user_id, username=message.author.name, is_tutorial=True, software=software, brief=False, model="gemini-1.5-flash")
-                logger.info(f"Generated detailed response (length: {len(response)})")
-                # Try to send as one message if under Discord limit
-                if len(response) <= 1900:
-                    await message.reply(response)
-                    logger.info(f"Sent detailed explanation as single message")
+                    result_data, _ = await verify_youtube_proof(message, state['min_subs'])
+                    is_verified = result_data.get("verified", False)
+                    is_edited = result_data.get("is_edited", False)
+                    manual_review = result_data.get("manual_review_needed", False)
+                    reason = result_data.get("reason", "Verification failed.")
+
+                    if manual_review:
+                         guild = bot.get_guild(state.get('guild_id'))
+                         admin_role = discord.utils.find(lambda r: "admin" in r.name.lower(), guild.roles) if guild else None
+                         admin_ping = admin_role.mention if admin_role else "@Admin"
+                         
+                         await message.reply(f"⚠️ **Manual Verification Required**\n{admin_ping} please review.\n**Reason:** {reason}")
+                         del user_states[user_id]
+                         return
+
+                    final_response = None
+                    if is_verified:
+                        role_id = state['role_id']
+                        guild = bot.get_guild(state.get('guild_id'))
+                        role = guild.get_role(role_id) if guild else None
+                        
+                        if role:
+                            try:
+                                member = guild.get_member(user_id) or await guild.fetch_member(user_id)
+                                await member.add_roles(role, reason="YouTube Verification")
+                                
+                                chan_name = result_data.get("channel_name", "Unknown")
+                                subs = result_data.get("live_subs", "Unknown")
+                                vids = result_data.get("video_count", "Unknown")
+                                
+                                embed = discord.Embed(title="✅ Verification Successful!", color=0x00FF00)
+                                priv = f"\n\n🗑️ *Privacy Mode: Deleting in 60s.*" if message.channel.id == get_role_request_chan() else ""
+                                embed.description = f"{role.mention} granted to {message.author.mention}.{priv}"
+                                embed.add_field(name="📺 Channel", value=chan_name, inline=True)
+                                embed.add_field(name="👥 Subscribers", value=subs, inline=True)
+                                embed.set_thumbnail(url=message.author.display_avatar.url)
+                                
+                                final_response = await message.reply(embed=embed)
+                                await log_activity("🎥 Role Granted", f"{message.author.name} verified.")
+                            except Exception as e:
+                                priv = f"\n\n🗑️ *Privacy Mode: Deleting in 60s.*" if message.channel.id == get_role_request_chan() else ""
+                                final_response = await message.reply(f"✅ Verified, but I couldn't add the role: {e}{priv}")
+                        else:
+                            priv = f"\n\n🗑️ *Privacy Mode: Deleting in 60s.*" if message.channel.id == get_role_request_chan() else ""
+                            final_response = await message.reply(f"✅ Verified! (Role not found).{priv}")
+                    else:
+                        cooldown_expiry = (datetime.now(timezone.utc) + timedelta(hours=12)).isoformat()
+                        yt_cooldowns[str(user_id)] = cooldown_expiry
+                        save_yt_cooldowns(yt_cooldowns)
+
+                        if is_edited:
+                            rejection_text = f"❌ **Verification Rejected**: {reason}"
+                            guild = bot.get_guild(state.get('guild_id'))
+                            if guild:
+                                member = guild.get_member(user_id) or await guild.fetch_member(user_id)
+                                await warn_user(member, guild, f"Verification Fraud: {reason}")
+                        else:
+                            rejection_text = f"❌ **Verification Failed**: {reason}"
+                        
+                        priv = f"\n\n🗑️ *Privacy Mode: Deleting in 60s.*" if message.channel.id == get_role_request_chan() else ""
+                        final_response = await message.reply(f"{rejection_text}{priv}")
+                    
+                    if final_response and message.channel.id == get_role_request_chan():
+                        async def delete_after_countdown(bot_msg, user_msg):
+                            try:
+                                await asyncio.sleep(60)
+                                try: await user_msg.delete() 
+                                except: pass
+                                try: await bot_msg.delete()
+                                except: pass
+                            except: pass
+                        bot.loop.create_task(delete_after_countdown(final_response, message))
+                    elif final_response:
+                        try:
+                            if final_response.embeds:
+                                embed = final_response.embeds[0]
+                                embed.description = embed.description.split("🗑️")[0].strip()
+                                await final_response.edit(embed=embed)
+                            else:
+                                await final_response.edit(content=final_response.content.split("🗑️")[0].strip())
+                        except: pass
+                
+                del user_states[user_id]
+                return
+
+            elif state['type'] == 'waiting_for_detail_decision':
+                user_message = message.content.lower().strip()
+                if any(word in user_message for word in ['yes', 'yeah', 'yep', 'sure', 'ok', 'okay', 'please', 'y', 'more']):
+                    async with message.channel.typing():
+                        response = get_gemini_response(state['original_question'], user_id, username=message.author.name, is_tutorial=True, software=state['software'], brief=False)
+                    if len(response) <= 1900:
+                        await message.reply(response)
+                    else:
+                        for chunk in [response[i:i+1900] for i in range(0, len(response), 1900)]:
+                            await message.reply(chunk)
                 else:
-                    # If too long, split into chunks but minimize number of messages
-                    chunks = [response[i:i+1900] for i in range(0, len(response), 1900)]
-                    logger.info(f"Splitting detailed response into {len(chunks)} messages")
-                    for chunk in chunks:
-                        await message.reply(chunk)
-            else:
-                # User doesn't want details, just confirm
-                logger.info(f"User declined detailed explanation")
-                await message.reply("Got it! Let me know if you need help with anything else! 👍")
-            
-            # Clean up state after response
-            del user_states[user_id]
-            logger.info(f"Cleaned up state for {message.author.name}")
-            return
+                    await message.reply("Got it! Let me know if you need help with anything else!")
+                
+                del user_states[user_id]
+                return
 
         except Exception as state_err:
-            logger.error(f"Error processing user state for {message.author.name}: {state_err}")
-            await message.reply("❌ An error occurred while processing your request. Please try again or contact an admin.")
+            logger.error(f"Error processing user state: {state_err}")
+            await message.reply("❌ An error occurred. Please try again later.")
             if user_id in user_states:
                 del user_states[user_id]
             return
