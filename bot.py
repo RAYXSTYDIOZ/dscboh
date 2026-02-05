@@ -205,6 +205,7 @@ def save_active_captchas(captchas):
 
 # --- LEVELING SYSTEM STORAGE ---
 user_levels = db_manager.get_levels()
+LEVELING_CHANNEL_ID = 1468888240726741119
 
 def save_levels(levels_data):
     for uid, data in levels_data.items():
@@ -1801,15 +1802,21 @@ async def leveling_handler(message):
             
     if new_level > old_level:
         user_levels[user_id]["level"] = new_level
-        # Level up alert
-        embed = discord.Embed(
-            title="🎊 LEVEL UP!",
-            description=f"Congratulations {message.author.mention}! You've reached **Level {new_level}**!",
-            color=0x00FF00
-        )
-        embed.set_thumbnail(url=message.author.display_avatar.url if message.author.display_avatar else None)
-        embed.set_footer(text="Keep chatting to earn more XP!")
-        await message.channel.send(embed=embed, delete_after=15)
+        
+        # Determine where to send level-up alert (only in the specific channel)
+        alert_channel = bot.get_channel(LEVELING_CHANNEL_ID)
+        if alert_channel:
+            embed = discord.Embed(
+                title="🎊 LEVEL UP!",
+                description=f"Congratulations {message.author.mention}! You've reached **Level {new_level}**!",
+                color=0x00FF00
+            )
+            embed.set_thumbnail(url=message.author.display_avatar.url if message.author.display_avatar else None)
+            embed.set_footer(text="Keep chatting to earn more XP!")
+            try:
+                await alert_channel.send(embed=embed, delete_after=30)
+            except Exception as e:
+                logger.error(f"Failed to send level-up alert to channel {LEVELING_CHANNEL_ID}: {e}")
     
     # Save levels immediately to prevent data loss on restart
     db_manager.save_level(user_id, user_levels[user_id]["xp"], user_levels[user_id]["level"])
@@ -4269,6 +4276,15 @@ async def help_command(ctx):
 @bot.command(name="level", aliases=["rank"])
 async def level_command(ctx, member: discord.Member = None):
     """Check your current level and XP. Usage: !level [@user]"""
+    # Channel restriction check
+    if ctx.channel.id != LEVELING_CHANNEL_ID:
+        try:
+            await ctx.message.delete()
+        except:
+            pass
+        await ctx.send(f"❌ {ctx.author.mention}, you can only check levels in <#{LEVELING_CHANNEL_ID}>!", delete_after=10)
+        return
+
     member = member or ctx.author
     user_id = member.id
     
@@ -4312,6 +4328,15 @@ async def level_command(ctx, member: discord.Member = None):
 @bot.command(name="leaderboard", aliases=["top", "lb"])
 async def leaderboard_command(ctx):
     """Show the top 10 users with the most XP."""
+    # Channel restriction check
+    if ctx.channel.id != LEVELING_CHANNEL_ID:
+        try:
+            await ctx.message.delete()
+        except:
+            pass
+        await ctx.send(f"❌ {ctx.author.mention}, you can only view the leaderboard in <#{LEVELING_CHANNEL_ID}>!", delete_after=10)
+        return
+
     if not user_levels:
         await ctx.send("The leaderboard is currently empty!")
         return
@@ -5057,6 +5082,11 @@ async def slash_commands(interaction: discord.Interaction):
 @bot.tree.command(name="level", description="Check your or someone else's level")
 @app_commands.describe(member="The user to check")
 async def slash_level(interaction: discord.Interaction, member: discord.Member = None):
+    # Channel restriction check
+    if interaction.channel_id != LEVELING_CHANNEL_ID:
+        await interaction.response.send_message(f"❌ You can only use leveling commands in <#{LEVELING_CHANNEL_ID}>!", ephemeral=True)
+        return
+
     member = member or interaction.user
     user_id = member.id
     
@@ -5084,6 +5114,11 @@ async def slash_level(interaction: discord.Interaction, member: discord.Member =
 
 @bot.tree.command(name="leaderboard", description="Show the top active users")
 async def slash_lb(interaction: discord.Interaction):
+    # Channel restriction check
+    if interaction.channel_id != LEVELING_CHANNEL_ID:
+        await interaction.response.send_message(f"❌ You can only view the leaderboard in <#{LEVELING_CHANNEL_ID}>!", ephemeral=True)
+        return
+
     if not user_levels:
         await interaction.response.send_message("No data available yet.", ephemeral=True)
         return
