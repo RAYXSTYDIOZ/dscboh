@@ -92,6 +92,13 @@ def rotate_gemini_key():
 # Fallback configuration
 FALLBACK_MODEL = "gemini-1.5-pro"
 
+def get_env_int(key, default):
+    """Safely get an integer from environment variables with a fallback."""
+    val = os.getenv(key)
+    if val and val.strip().isdigit():
+        return int(val)
+    return default
+
 def safe_generate_content(model, contents, config=None):
     """Wrapper to handle API key rotation on rate limits and automatic model fallback."""
     if not GEMINI_KEYS:
@@ -206,9 +213,9 @@ def save_active_captchas(captchas):
 # --- LEVELING SYSTEM STORAGE ---
 user_levels = db_manager.get_levels()
 LEVELING_CHANNEL_ID = 1468888240726741119
-WELCOME_CHANNEL_ID = int(os.getenv("WELCOME_CHANNEL_ID", "0"))
-RULES_CHANNEL_ID = int(os.getenv("RULES_CHANNEL_ID", "0"))
-GENERAL_CHAT_CHANNEL_ID = int(os.getenv("GENERAL_CHAT_CHANNEL_ID", "1311717154793459764"))
+WELCOME_CHANNEL_ID = get_env_int("WELCOME_CHANNEL_ID", 0)
+RULES_CHANNEL_ID = get_env_int("RULES_CHANNEL_ID", 0)
+GENERAL_CHAT_CHANNEL_ID = get_env_int("GENERAL_CHAT_CHANNEL_ID", 1311717154793459764)
 
 def save_levels(levels_data):
     for uid, data in levels_data.items():
