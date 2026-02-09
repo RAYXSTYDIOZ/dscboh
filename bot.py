@@ -7140,14 +7140,9 @@ async def zaebects_command(ctx):
 async def plugineverything_command(ctx):
     """Plugin Everything Suite."""
     plugins = {
-        "AutoFill 2.0.2": "https://example.com/pe/autofill",
-        "Cartoon Moblur 1.6.3": "https://example.com/pe/moblur",
-        "Deep Glow 2.1.0 & 1.6.6": "https://example.com/pe/deepglow",
-        "DiscoText 1.2.6": "https://example.com/pe/discotext",
-        "Displacer Pro 1.5.0": "https://example.com/pe/displacer",
-        "Shadow Studio 3": "https://example.com/pe/shadow",
-        "TextBox 2 & TextDelay": "https://example.com/pe/text",
-        "Quick Chromatic Aberration": "https://example.com/pe/qca"
+        "Deep Glow v2": "https://pixeldrain.com/u/fZvB2tFZ",
+        "Deep Glow v1": "https://pixeldrain.com/u/iML27rzS",
+        "Shadow Studio": "https://pixeldrain.com/u/nutT5H9T"
     }
     embed = discord.Embed(
         title="✨ PLUGIN EVERYTHING SUITE",
@@ -7163,8 +7158,8 @@ async def plugineverything_command(ctx):
 async def elementsupply_command(ctx):
     """ElementSupply Co Plugins."""
     plugins = {
-        "Glitchify": "https://example.com/elementsupply/glitchify",
-        "Polytrace": "https://example.com/elementsupply/polytrace"
+        "Glitchify": "https://pixeldrain.com/u/zsEQ3aad",
+        "Polytrace": "https://pixeldrain.com/u/obW9g2ba"
     }
     embed = discord.Embed(
         title="📦 ELEMENTSUPPLY CO",
@@ -7180,8 +7175,7 @@ async def elementsupply_command(ctx):
 async def pixelsorter_command(ctx):
     """Pixel Sorter Studio Plugins."""
     plugins = {
-        "Pixel Sorter Studio Bundle": "https://example.com/pixelsorter/bundle",
-        "BallPoint 1.2.1 (Crash Fix)": "https://example.com/pixelsorter/ballpoint"
+        "Pixel Sorter Studio Bundle": "https://pixeldrain.com/u/g6bMMUCF"
     }
     embed = discord.Embed(
         title="🎞️ PIXEL SORTER STUDIO",
@@ -7197,7 +7191,7 @@ async def pixelsorter_command(ctx):
 async def filmconvert_command(ctx):
     """FilmConvert Plugins."""
     plugins = {
-        "FilmConvert Bundle": "https://example.com/filmconvert/bundle"
+        "FilmConvert Bundle": "https://pixeldrain.com/u/fs4GCNa2"
     }
     embed = discord.Embed(
         title="🎞️ FILMCONVERT SUITE",
