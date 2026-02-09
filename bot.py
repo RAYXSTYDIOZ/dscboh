@@ -4237,6 +4237,10 @@ async def help_command(ctx):
         ("!aura", "Check your vibe and profile."),
         ("!clout", "Viral potential analysis for clips."),
         ("!pulse", "Chat summary and recent activity."),
+        ("!think", "Deep analysis and logical reasoning."),
+        ("!briefing", "Executive summary of key information."),
+        ("!strategize", "Strategic advice and decision making."),
+        ("!pulse_check", "Analyze emerging trends and creator insights."),
         ("!mimic", "Copy how a user texts."),
         ("!bio", "Get a professional creator bio."),
         ("!snipe", "Recover deleted messages."),
@@ -4267,7 +4271,7 @@ async def help_command(ctx):
         embed.add_field(name="⚡ Features", value=p_text, inline=False)
 
     embed.add_field(name="📈 Leveling", value="`!level`, `!leaderboard`", inline=False)
-    embed.add_field(name="💻 Software", value="`!aecrack`, `!pscrack`, `!mecrack`, `!prcrack`, `!topazcrack`", inline=False)
+    embed.add_field(name="💻 Software & Tools", value="`!editingsoftwares`, `!plugins`, `!extensions`", inline=False)
     
     embed.set_footer(text="Created by BMR")
     
