@@ -5142,7 +5142,8 @@ async def file_command_handler(message):
                       "remind", "note", "timer", "convert", "emoji", "calculate", "weather", "profile", "serverinfo",
                       "creative", "story", "quote", "brainstorm", "design", "name", "aesthetic", "topics", "motivate",
                       "role", "setup_roles", "setup_verification", "check_automod", "setup_automod", "setup_content_roles", "echo",
-                      "level", "leaderboard", "rank", "sync", "manual_sync", "commands", "cmds", "nudge", "portfolio", "profile", "p"]:
+                      "level", "leaderboard", "rank", "sync", "manual_sync", "commands", "cmds", "nudge", "portfolio", "profile", "p",
+                      "ae", "pr", "me", "ps", "topaz", "editingsoftwares"]:
         return
     
     logger.info(f'User {message.author.name} (ID: {message.author.id}) requested file: {requested_file}')
@@ -6860,21 +6861,21 @@ async def set_rules_command(ctx):
 async def editing_softwares_command(ctx):
     """Protocol: List all available creative software distributions."""
     embed = discord.Embed(
-        title="🎬 CREATIVE SOFTWARE REPOSITORY",
+        title="🎬 CREATIVE SOFTWARE HUB",
         description=(
-            "Welcome to the **Prime Distribution Hub**. Below are the elite distributions available for your creative workflow.\n\n"
-            "**Available Software Protocols:**\n"
-            "• `!ae` - After Effects Distributions\n"
-            "• `!pr` - Premiere Pro Distributions\n"
-            "• `!me` - Media Encoder Distributions\n"
-            "• `!ps` - Photoshop Distributions\n"
-            "• `!topaz` - Topaz AI Distributions\n\n"
-            "*Select a protocol above to view available versions and secure links.*"
+            "Welcome to the **Prime Software Hub**. Here are all the essential versions for your creative setup.\n\n"
+            "**Available Software:**\n"
+            "• `!ae` - After Effects\n"
+            "• `!pr` - Premiere Pro\n"
+            "• `!me` - Media Encoder\n"
+            "• `!ps` - Photoshop\n"
+            "• `!topaz` - Topaz AI\n\n"
+            "*Type a command from above to see the versions and download links.*"
         ),
         color=0x00FFB4,
         timestamp=datetime.now(timezone.utc)
     )
-    embed.set_footer(text="Prime | Software Repository")
+    embed.set_footer(text="Prime | Software Hub")
     if ctx.guild.icon:
         embed.set_author(name=ctx.guild.name, icon_url=ctx.guild.icon.url)
     
@@ -6893,16 +6894,16 @@ async def ae_versions_command(ctx):
     }
     
     embed = discord.Embed(
-        title="🎬 AFTER EFFECTS | DISTRIBUTIONS",
-        description="Select your required version. All links are optimized for elite performance.\n\n🔑 **Password**: `star`",
+        title="🎬 AFTER EFFECTS | VERSIONS",
+        description="Pick the version you need. All links are tested and fast.\n\n🔑 **Password**: `star`",
         color=0x9999FF,
         timestamp=datetime.now(timezone.utc)
     )
     
     for version, link in versions.items():
-        embed.add_field(name=version, value=f"🔗 [Download Link]({link})", inline=True)
+        embed.add_field(name=version, value=f"🔗 [Download]({link})", inline=True)
     
-    embed.set_footer(text="Prime | VFX Protocol")
+    embed.set_footer(text="Prime | VFX Suite")
     await ctx.send(embed=embed)
 
 @bot.command(name="pr")
@@ -6915,16 +6916,16 @@ async def pr_versions_command(ctx):
     }
     
     embed = discord.Embed(
-        title="🎞️ PREMIERE PRO | DISTRIBUTIONS",
-        description="Elite editing distributions for your sequence workflow.\n\n🔑 **Password**: `star`",
+        title="🎞️ PREMIERE PRO | VERSIONS",
+        description="Fast download versions for your editing setup.\n\n🔑 **Password**: `star`",
         color=0x000055,
         timestamp=datetime.now(timezone.utc)
     )
     
     for version, link in versions.items():
-        embed.add_field(name=version, value=f"🔗 [Download Link]({link})", inline=True)
+        embed.add_field(name=version, value=f"🔗 [Download]({link})", inline=True)
     
-    embed.set_footer(text="Prime | Edit Protocol")
+    embed.set_footer(text="Prime | Edit Suite")
     await ctx.send(embed=embed)
 
 @bot.command(name="me")
@@ -6940,16 +6941,16 @@ async def me_versions_command(ctx):
     }
     
     embed = discord.Embed(
-        title="📦 MEDIA ENCODER | DISTRIBUTIONS",
-        description="Rendering and encoding protocols for multi-format export.\n\n🔑 **Password**: `star`",
+        title="📦 MEDIA ENCODER | VERSIONS",
+        description="Tools for rendering and encoding your projects.\n\n🔑 **Password**: `star`",
         color=0xCCFF00,
         timestamp=datetime.now(timezone.utc)
     )
     
     for version, link in versions.items():
-        embed.add_field(name=version, value=f"🔗 [Download Link]({link})", inline=True)
+        embed.add_field(name=version, value=f"🔗 [Download]({link})", inline=True)
     
-    embed.set_footer(text="Prime | Render Protocol")
+    embed.set_footer(text="Prime | Render Suite")
     await ctx.send(embed=embed)
 
 @bot.command(name="ps")
@@ -6962,16 +6963,16 @@ async def ps_versions_command(ctx):
     }
     
     embed = discord.Embed(
-        title="🎨 PHOTOSHOP | DISTRIBUTIONS",
-        description="Master imaging distributions for design and texture work.\n\n🔑 **Password**: `star`",
+        title="🎨 PHOTOSHOP | VERSIONS",
+        description="The best versions for design and texture work.\n\n🔑 **Password**: `star`",
         color=0x31A8FF,
         timestamp=datetime.now(timezone.utc)
     )
     
     for version, link in versions.items():
-        embed.add_field(name=version, value=f"🔗 [Download Link]({link})", inline=True)
+        embed.add_field(name=version, value=f"🔗 [Download]({link})", inline=True)
     
-    embed.set_footer(text="Prime | Design Protocol")
+    embed.set_footer(text="Prime | Design Suite")
     await ctx.send(embed=embed)
 
 @bot.command(name="topaz")
@@ -6984,16 +6985,16 @@ async def topaz_versions_command(ctx):
     }
     
     embed = discord.Embed(
-        title="💎 TOPAZ AI | DISTRIBUTIONS",
-        description="AI-driven upscaling and enhancement protocols.\n\n🔑 **Password**: `star`",
+        title="💎 TOPAZ AI | VERSIONS",
+        description="AI upscaling and tools for your media.\n\n🔑 **Password**: `star`",
         color=0x005AF0,
         timestamp=datetime.now(timezone.utc)
     )
     
     for version, link in versions.items():
-        embed.add_field(name=version, value=f"🔗 [Download Link]({link})", inline=True)
+        embed.add_field(name=version, value=f"🔗 [Download]({link})", inline=True)
     
-    embed.set_footer(text="Prime | Intelligence Protocol")
+    embed.set_footer(text="Prime | AI Suite")
     await ctx.send(embed=embed)
 
 def run_bot():
