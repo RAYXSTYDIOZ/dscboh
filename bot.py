@@ -6919,12 +6919,12 @@ async def editing_softwares_command(ctx):
 async def ae_versions_command(ctx):
     """Distributions for After Effects."""
     versions = {
-        "After Effects 2020": "https://example.com/ae/2020",
-        "After Effects 2021": "https://example.com/ae/2021",
-        "After Effects 2023": "https://example.com/ae/2023",
-        "After Effects 2024": "https://example.com/ae/2024",
-        "After Effects 2025": "https://example.com/ae/2025",
-        "After Effects 2026": "https://example.com/ae/2026"
+        "After Effects 2020": "https://pixeldrain.com/u/RQyayo7K",
+        "After Effects 2021": "https://pixeldrain.com/u/LPrfhXHv",
+        "After Effects 2023": "https://pixeldrain.com/u/iViNM8uc",
+        "After Effects 2024": "https://pixeldrain.com/u/Gt6XmdR9",
+        "After Effects 2025": "https://pixeldrain.com/u/AJvwJ4tG",
+        "After Effects 2026": "https://pixeldrain.com/u/AJvwJ4tG"
     }
     
     embed = discord.Embed(
