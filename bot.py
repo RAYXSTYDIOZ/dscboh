@@ -6887,9 +6887,145 @@ async def set_rules_command(ctx):
             await ctx.send(f"⚠️ **Warning**: Rules posted, but I couldn't pin them (check my permissions).", delete_after=10)
             logger.error(f"Failed to pin rules: {e}")
 
-    except Exception as e:
-        logger.error(f"Error in setrules command: {e}")
-        await ctx.send(f"❌ **System Error**: Failed to deploy rules protocol. {str(e)}", delete_after=10)
+@bot.command(name="editingsoftwares")
+async def editing_softwares_command(ctx):
+    """Protocol: List all available creative software distributions."""
+    embed = discord.Embed(
+        title="🎬 CREATIVE SOFTWARE REPOSITORY",
+        description=(
+            "Welcome to the **Prime Distribution Hub**. Below are the elite distributions available for your creative workflow.\n\n"
+            "**Available Software Protocols:**\n"
+            "• `!ae` - After Effects Distributions\n"
+            "• `!pr` - Premiere Pro Distributions\n"
+            "• `!me` - Media Encoder Distributions\n"
+            "• `!ps` - Photoshop Distributions\n"
+            "• `!topaz` - Topaz AI Distributions\n\n"
+            "*Select a protocol above to view available versions and secure links.*"
+        ),
+        color=0x00FFB4,
+        timestamp=datetime.now(timezone.utc)
+    )
+    embed.set_footer(text="Prime | Software Repository")
+    if ctx.guild.icon:
+        embed.set_author(name=ctx.guild.name, icon_url=ctx.guild.icon.url)
+    
+    await ctx.send(embed=embed)
+
+@bot.command(name="ae")
+async def ae_versions_command(ctx):
+    """Distributions for After Effects."""
+    versions = {
+        "After Effects 2020": "https://example.com/ae/2020",
+        "After Effects 2021": "https://example.com/ae/2021",
+        "After Effects 2023": "https://example.com/ae/2023",
+        "After Effects 2024": "https://example.com/ae/2024",
+        "After Effects 2025": "https://example.com/ae/2025",
+        "After Effects 2026": "https://example.com/ae/2026"
+    }
+    
+    embed = discord.Embed(
+        title="🎬 AFTER EFFECTS | DISTRIBUTIONS",
+        description="Select your required version. All links are optimized for elite performance.",
+        color=0x9999FF,
+        timestamp=datetime.now(timezone.utc)
+    )
+    
+    for version, link in versions.items():
+        embed.add_field(name=version, value=f"[Download Link]({link})", inline=True)
+    
+    embed.set_footer(text="Prime | VFX Protocol")
+    await ctx.send(embed=embed)
+
+@bot.command(name="pr")
+async def pr_versions_command(ctx):
+    """Distributions for Premiere Pro."""
+    versions = {
+        "Premiere Pro 2024": "https://example.com/pr/2024",
+        "Premiere Pro 2025": "https://example.com/pr/2025",
+        "Premiere Pro 2026": "https://example.com/pr/2026"
+    }
+    
+    embed = discord.Embed(
+        title="🎞️ PREMIERE PRO | DISTRIBUTIONS",
+        description="Elite editing distributions for your sequence workflow.",
+        color=0x000055,
+        timestamp=datetime.now(timezone.utc)
+    )
+    
+    for version, link in versions.items():
+        embed.add_field(name=version, value=f"[Download Link]({link})", inline=True)
+    
+    embed.set_footer(text="Prime | Edit Protocol")
+    await ctx.send(embed=embed)
+
+@bot.command(name="me")
+async def me_versions_command(ctx):
+    """Distributions for Media Encoder."""
+    versions = {
+        "Media Encoder 2020": "https://example.com/me/2020",
+        "Media Encoder 2021": "https://example.com/me/2021",
+        "Media Encoder 2023": "https://example.com/me/2023",
+        "Media Encoder 2024": "https://example.com/me/2024",
+        "Media Encoder 2025": "https://example.com/me/2025",
+        "Media Encoder 2026": "https://example.com/me/2026"
+    }
+    
+    embed = discord.Embed(
+        title="📦 MEDIA ENCODER | DISTRIBUTIONS",
+        description="Rendering and encoding protocols for multi-format export.",
+        color=0xCCFF00,
+        timestamp=datetime.now(timezone.utc)
+    )
+    
+    for version, link in versions.items():
+        embed.add_field(name=version, value=f"[Download Link]({link})", inline=True)
+    
+    embed.set_footer(text="Prime | Render Protocol")
+    await ctx.send(embed=embed)
+
+@bot.command(name="ps")
+async def ps_versions_command(ctx):
+    """Distributions for Photoshop."""
+    versions = {
+        "Photoshop 2024": "https://example.com/ps/2024",
+        "Photoshop 2025": "https://example.com/ps/2025",
+        "Photoshop 2026": "https://example.com/ps/2026"
+    }
+    
+    embed = discord.Embed(
+        title="🎨 PHOTOSHOP | DISTRIBUTIONS",
+        description="Master imaging distributions for design and texture work.",
+        color=0x31A8FF,
+        timestamp=datetime.now(timezone.utc)
+    )
+    
+    for version, link in versions.items():
+        embed.add_field(name=version, value=f"[Download Link]({link})", inline=True)
+    
+    embed.set_footer(text="Prime | Design Protocol")
+    await ctx.send(embed=embed)
+
+@bot.command(name="topaz")
+async def topaz_versions_command(ctx):
+    """Distributions for Topaz AI."""
+    versions = {
+        "Topaz Video AI": "https://example.com/topaz/video",
+        "Topaz Photo AI": "https://example.com/topaz/photo",
+        "Topaz Gigapixel AI": "https://example.com/topaz/gigapixel"
+    }
+    
+    embed = discord.Embed(
+        title="💎 TOPAZ AI | DISTRIBUTIONS",
+        description="AI-driven upscaling and enhancement protocols.",
+        color=0x005AF0,
+        timestamp=datetime.now(timezone.utc)
+    )
+    
+    for version, link in versions.items():
+        embed.add_field(name=version, value=f"[Download Link]({link})", inline=True)
+    
+    embed.set_footer(text="Prime | Intelligence Protocol")
+    await ctx.send(embed=embed)
 
 def run_bot():
     """Function to start the bot with the token from environment variables."""
