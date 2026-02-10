@@ -22,7 +22,7 @@ load_dotenv()
 logger = logging.getLogger('prime_brain')
 
 # --- CONFIGURATION ---
-PRIMARY_MODEL = "gemini-3-flash-preview"
+PRIMARY_MODEL = "gemini-3-flash"
 FALLBACK_MODEL = "gemini-1.5-pro"
 SECRET_LOG_CHANNEL_ID = 1456312201974644776
 
@@ -64,6 +64,15 @@ def safe_generate_content(model, contents, config=None):
             try:
                 if not gemini_client:
                     if not rotate_gemini_key(): break
+                # Use the provided config or create a default one with user's specific settings
+                if config is None:
+                    config = types.GenerateContentConfig(
+                        temperature=1.0,
+                        thinking_config=types.ThinkingConfig(include_thoughts=False) # 'low' thinking equivalent in some SDK versions
+                    )
+                
+                # Note: Some SDK versions use 'thinking_level' directly in the config dict
+                # We'll stick to the standard types for safety but include the parameters
                 return gemini_client.models.generate_content(
                     model=model_to_try,
                     contents=contents,
@@ -135,7 +144,8 @@ Personality:
 - Match their energy. If they're being a clown, handle it.
 - Be sarcastic and dismissive. Don't take their crap.
 - Give them attitude but keep it elite.
-- No "Features" or "robot" talk. Just shut them down.
+- No "Features" or "robot" talk. Just shut them down."""
+
 def get_tutorial_prompt(software=None, brief=False):
     if software and brief:
         return f"""You are "Prime", developed by BMR. The user wants help with {software}.

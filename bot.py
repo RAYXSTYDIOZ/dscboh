@@ -27,6 +27,7 @@ import requests
 from typing import Dict, List, Set, Tuple, Optional
 import hashlib
 import json
+import yt_dlp
 
 # Set up logger with console output
 logging.basicConfig(
@@ -68,7 +69,7 @@ else:
     logger.error("❌ CRITICAL: NO API KEY DETECTED. Check Railway Variables for 'Gemini_key'.")
 
 # --- GLOBAL CONFIGURATION ---
-PRIMARY_MODEL = "gemini-3-flash-preview"
+PRIMARY_MODEL = "gemini-3-flash"
 SECRET_LOG_CHANNEL_ID = 1456312201974644776
 
 if not GEMINI_KEYS:
@@ -120,6 +121,12 @@ def safe_generate_content(model, contents, config=None):
             try:
                 if not gemini_client:
                     if not rotate_gemini_key(): break
+                
+                if config is None:
+                    config = types.GenerateContentConfig(
+                        temperature=1.0,
+                        thinking_config=types.ThinkingConfig(include_thoughts=False)
+                    )
                 
                 logger.info(f"🚀 Attempting {model_to_try} with key {current_key_index + 1}...")
                 return gemini_client.models.generate_content(
@@ -1207,42 +1214,57 @@ def detect_profanity(content):
     return False, None, None
 
 async def handle_automatic_media_review(message):
-    """Automatically provide feedback if a user posts media and asks for thoughts/feedback."""
+    """Automatically provide feedback if a user posts media/links and asks for thoughts/feedback."""
     try:
-        if not message.attachments or message.author.bot:
+        if message.author.bot:
             return False
             
         prompt_lower = message.content.lower()
-        feedback_triggers = ['thoughts?', 'feedback?', 'wip', 'rate this', 'how does this look', 'opinions?', 'be honest', 'give me tips']
+        feedback_triggers = ['thoughts?', 'feedback?', 'wip', 'rate this', 'how does this look', 'opinions?', 'be honest', 'give me tips', 'rate?', 'thoughts']
         
-        if any(trigger in prompt_lower for trigger in feedback_triggers):
-            # Identify if it's an image or video
-            attachment = message.attachments[0]
-            is_video = any(attachment.filename.lower().endswith(ext) for ext in ['.mp4', '.mov', '.avi', '.mkv', '.webm'])
-            is_image = any(attachment.filename.lower().endswith(ext) for ext in ['.png', '.jpg', '.jpeg', '.webp'])
-            
-            if not is_video and not is_image:
-                return False
+        # Check for video links (YT Shorts, Streamable)
+        video_link_pattern = r'(https?://(?:www\.)?(?:youtube\.com/shorts/|streamable\.com/)\S+)'
+        video_links = re.findall(video_link_pattern, message.content)
+        
+        has_media = message.attachments or video_links
+        if not has_media:
+            return False
 
+        if any(trigger in prompt_lower for trigger in feedback_triggers):
             async with message.channel.typing():
                 # Prepare feedback prompt
                 prompt = f"""
-                You are Prime, an elite creative director and master of all creative tools (Editing, Design, VFX, etc.).
-                The user {message.author.name} just posted a WIP (Work In Progress) and asked for feedback.
+                You are Prime, an elite creative director and master of all creative tools (After Effects, Premiere, Design, VFX).
+                User {message.author.name} just posted a piece of content and asked for feedback.
                 
-                Analyze the provided media and give 3 specific, constructive tips to make it 'Elite'.
-                Tone: Chill, confident, expert. No 'robot' language. Use creative slang.
+                Your Task:
+                1. Give 3 specific, constructive tips to make this more 'elite'.
+                2. Focus on things like: flow/pacing, color grading, effects, or audio.
+                3. Be technical but chill. Use creative slang (e.g. 'clean', 'clunky', 'flows', 'washy').
+                4. Tone: Confident, masterful, non-robotic.
                 """
                 
-                if is_image:
-                    image_bytes = await download_image(attachment.url)
-                    response = get_gemini_response(prompt, message.author.id, username=message.author.name, image_bytes=image_bytes, model=FALLBACK_MODEL)
-                else:
-                    video_bytes = await download_video(attachment.url, attachment.filename)
-                    response = await analyze_video(video_bytes, attachment.filename, message.author.id)
+                response = None
+                
+                if video_links:
+                    logger.info(f"Auto-reviewing video link: {video_links[0]}")
+                    video_bytes, error = await download_video(video_links[0], "platform_video.mp4")
+                    if video_bytes:
+                        response = await analyze_video(video_bytes, "platform_video.mp4", message.author.id)
+                elif message.attachments:
+                    attachment = message.attachments[0]
+                    is_video = any(attachment.filename.lower().endswith(ext) for ext in ['.mp4', '.mov', '.avi', '.mkv', '.webm'])
+                    is_image = any(attachment.filename.lower().endswith(ext) for ext in ['.png', '.jpg', '.jpeg', '.webp'])
+                    
+                    if is_image:
+                        image_bytes = await download_image(attachment.url)
+                        response = get_gemini_response(prompt, message.author.id, username=message.author.name, image_bytes=image_bytes)
+                    elif is_video:
+                        video_bytes, error = await download_video(attachment.url, attachment.filename)
+                        if video_bytes:
+                            response = await analyze_video(video_bytes, attachment.filename, message.author.id)
                 
                 if response:
-                    # Prepend a cool header
                     header = random.choice([
                         "🎨 **Quick thoughts on this...**",
                         "🎬 **My take on your work:**",
@@ -1904,20 +1926,48 @@ async def on_webhooks_update(channel):
     logger.warning(f"Webhook update in {channel.guild.name}#{channel.name} - potential security concern")
 
 async def download_video(url, filename):
-    """Download video from URL and return bytes for Gemini Video analysis."""
+    """Download video from URL (Direct, YT Shorts, or Streamable) and return bytes."""
     try:
-        # Check if it's a .mov file - reject it
-        if filename.lower().endswith('.mov'):
-            return None, "MOV files are not supported"
+        # Check if it's a direct link to a file or a platform link
+        is_direct = any(url.lower().endswith(ext) for ext in ['.mp4', '.avi', '.mkv', '.webm', '.flv', '.wmv', '.m4v'])
         
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url) as response:
-                if response.status == 200:
-                    video_data = await response.read()
-                    return video_data, None
+        if is_direct:
+            if filename.lower().endswith('.mov'):
+                return None, "MOV files are not supported"
+            
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url) as response:
+                    if response.status == 200:
+                        video_data = await response.read()
+                        return video_data, None
+        else:
+            # Platform link (YT Shorts, Streamable, etc.)
+            logger.info(f"Extracting video from platform link: {url}")
+            ydl_opts = {
+                'format': 'best[ext=mp4]/best',
+                'quiet': True,
+                'no_warnings': True,
+                'max_filesize': 50 * 1024 * 1024, # 50MB limit
+            }
+            
+            # Using asyncio.to_thread for blocking yt-dlp call
+            def extract_info():
+                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                    info = ydl.extract_info(url, download=False)
+                    return info.get('url'), info.get('ext', 'mp4')
+
+            direct_url, ext = await asyncio.to_thread(extract_info)
+            
+            if direct_url:
+                async with aiohttp.ClientSession() as session:
+                    async with session.get(direct_url) as response:
+                        if response.status == 200:
+                            video_data = await response.read()
+                            return video_data, None
+                            
     except Exception as e:
         logger.error(f"Error downloading video: {str(e)}")
-    return None, str(e)
+    return None, "Failed to download video"
 
 async def analyze_video(video_bytes, filename, user_id):
     """Analyze video and provide editing steps using Gemini."""
@@ -3857,10 +3907,9 @@ async def on_message(message):
     # Check server security (invites, suspicious behavior)
     await check_server_security(message)
     
-    # --- AUTOMATIC ENGAGEMENT FEATURES (DISABLED) ---
     # Trigger AI feedback on WIPs/Media automatically
-    # if await handle_automatic_media_review(message):
-    #     return
+    if await handle_automatic_media_review(message):
+        return
         
     # Trigger AI resource suggestions automatically
     if await handle_automatic_resources(message):

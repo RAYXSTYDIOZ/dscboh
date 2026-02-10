@@ -5,11 +5,18 @@ from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 import httpx
 import os
+import sys
+from pathlib import Path
 from dotenv import load_dotenv
-from database import db_manager
 import logging
 import psutil
 import time
+
+# Fix imports for database and brain since they are in the parent directory
+BASE_DIR = Path(__file__).parent
+sys.path.append(str(BASE_DIR.parent))
+
+from database import db_manager
 import brain
 
 load_dotenv()
@@ -45,35 +52,35 @@ logger = logging.getLogger("dashboard_server")
 
 @app.get("/")
 async def root():
-    return FileResponse("index.html")
+    return FileResponse(BASE_DIR / "index.html")
 
 @app.get("/index.html")
 async def index():
-    return FileResponse("index.html")
+    return FileResponse(BASE_DIR / "index.html")
 
 @app.get("/terms.html")
 async def terms():
-    return FileResponse("terms.html")
+    return FileResponse(BASE_DIR / "terms.html")
 
 @app.get("/privacy.html")
 async def privacy():
-    return FileResponse("privacy.html")
+    return FileResponse(BASE_DIR / "privacy.html")
 
 @app.get("/landing.css")
 async def landing_css():
-    return FileResponse("landing.css")
+    return FileResponse(BASE_DIR / "landing.css")
 
 @app.get("/logo.png")
 async def logo_png():
-    return FileResponse("logo.png")
+    return FileResponse(BASE_DIR / "logo.png")
 
 @app.get("/status.html")
 async def status_page():
-    return FileResponse("status.html")
+    return FileResponse(BASE_DIR / "status.html")
 
 @app.get("/playground.html")
 async def playground_page():
-    return FileResponse("playground.html")
+    return FileResponse(BASE_DIR / "playground.html")
 
 @app.get("/login")
 async def login():
@@ -228,7 +235,8 @@ async def logout(request: Request):
     return RedirectResponse(url="/dashboard/index.html")
 
 # Serve the dashboard files
-app.mount("/dashboard", StaticFiles(directory="dashboard"), name="dashboard")
+app.mount("/dashboard", StaticFiles(directory=BASE_DIR / "dashboard"), name="dashboard")
+app.mount("/assets", StaticFiles(directory=BASE_DIR / "assets"), name="assets")
 
 if __name__ == "__main__":
     import uvicorn
