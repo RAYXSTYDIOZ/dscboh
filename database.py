@@ -203,6 +203,14 @@ class DatabaseManager:
                 )
             ''')
             
+            # Table for Guild Settings (Updates channel, prefixes, etc.)
+            create_table('''
+                CREATE TABLE IF NOT EXISTS guild_settings (
+                    guild_id BIGINT PRIMARY KEY,
+                    settings TEXT -- JSON string
+                )
+            ''')
+            
             if not self.is_postgres:
                 cursor.execute('PRAGMA journal_mode=WAL')
                 cursor.execute('PRAGMA synchronous=NORMAL')
@@ -584,5 +592,43 @@ class DatabaseManager:
         except Exception as e:
             logger.error(f"Error getting deleted messages: {e}")
             return []
+
+    # --- Guild Settings ---
+    def save_guild_setting(self, guild_id, key, value):
+        p = self.get_placeholder()
+        try:
+            with self.get_connection() as conn:
+                with self.get_cursor(conn) as cursor:
+                    # Get existing settings
+                    cursor.execute(f'SELECT settings FROM guild_settings WHERE guild_id = {p}', (int(guild_id),))
+                    row = cursor.fetchone()
+                    settings = json.loads(row[0]) if row else {}
+                    
+                    # Update setting
+                    settings[key] = value
+                    
+                    # Save back
+                    if row:
+                        cursor.execute(f'UPDATE guild_settings SET settings = {p} WHERE guild_id = {p}', (json.dumps(settings), int(guild_id)))
+                    else:
+                        cursor.execute(f'INSERT INTO guild_settings (guild_id, settings) VALUES ({p}, {p})', (int(guild_id), json.dumps(settings)))
+                conn.commit()
+        except Exception as e:
+            logger.error(f"Error saving guild setting: {e}")
+
+    def get_guild_setting(self, guild_id, key, default=None):
+        p = self.get_placeholder()
+        try:
+            with self.get_connection() as conn:
+                with self.get_cursor(conn) as cursor:
+                    cursor.execute(f'SELECT settings FROM guild_settings WHERE guild_id = {p}', (int(guild_id),))
+                    row = cursor.fetchone()
+                    if row:
+                        settings = json.loads(row[0])
+                        return settings.get(key, default)
+                    return default
+        except Exception as e:
+            logger.error(f"Error getting guild setting: {e}")
+            return default
 
 db_manager = DatabaseManager()

@@ -3531,10 +3531,11 @@ async def on_guild_join(guild):
                     "`!intercept` - Snitch deleted msg | `!files` - Asset library\n"
                     "`!profile` - User status | `!serverinfo` - Guild stats\n\n"
                     "**🕵️ ADMIN & SECRET CONTROLS**\n"
-                    "*As the server inviter/owner, you have exclusive access to these:*\n"
-                    "`!ban @user` - Permanent removal | `!timeout @user` - Temp mute\n"
-                    "`!mute @user` - Role-based mute | `!unmute @user` - Restore access\n"
-                    "`!check_automod` - View protection status | `!pulse` - Vibe check\n\n"
+                    "*Exclusive tools for server owners and trusted admins:*\n"
+                    "`!setup_updates #channel` - Select where you want to receive bot news.\n"
+                    "`!appeal_link @user` - Manually send an appeal form to a user.\n"
+                    "`!ban @user` | `!mute @user` - Modern moderation (Appeals included).\n"
+                    "`!check_automod` - View current security layers.\n\n"
                     "We will notify you here once the full version is released. Keep it technical."
                 ),
                 color=0x5865F2
@@ -5562,7 +5563,13 @@ async def ban_command(ctx, member: discord.Member = None):
         
         # Send DM to user before banning
         try:
-            await member.send(f"You have been **BANNED** from {ctx.guild.name} by {ctx.author.name}.")
+            view = AppealButtonView(ctx.guild.id, appeal_type="BAN")
+            embed = discord.Embed(
+                title="🔨 YOU HAVE BEEN BANNED",
+                description=f"You have been banned from **{ctx.guild.name}** by `{ctx.author.name}`.\n\nIf you believe this was a mistake, you can appeal using the button below.",
+                color=0xFF0000
+            )
+            await member.send(embed=embed, view=view)
         except:
             pass  # User may have DMs disabled
         
@@ -5645,7 +5652,13 @@ async def timeout_command(ctx, member: discord.Member = None, duration: str = No
         
         # Send DM to user before timeout
         try:
-            await member.send(f"You have been **TIMED OUT** in {ctx.guild.name} by {ctx.author.name} for {duration}.")
+            view = AppealButtonView(ctx.guild.id, appeal_type="MUTE")
+            embed = discord.Embed(
+                title="🔇 YOU HAVE BEEN TIMED OUT",
+                description=f"You have been timed out in **{ctx.guild.name}** by `{ctx.author.name}` for `{duration}`.\n\nIf you believe this was a mistake, you can appeal using the button below.",
+                color=0xFFA500
+            )
+            await member.send(embed=embed, view=view)
         except:
             pass  # User may have DMs disabled
         
@@ -6394,6 +6407,77 @@ async def executive_briefing(ctx):
             await ctx.send(embed=embed)
         except Exception as e:
             await ctx.send(BOT_ERROR_MSG)
+
+    await ctx.send(embed=embed)
+
+@bot.command(name="setup_updates")
+async def setup_updates(ctx, channel: discord.TextChannel = None):
+    """Set the channel for bot updates. Usage: !setup_updates #channel"""
+    if not is_server_admin(ctx.author, ctx.guild):
+        await ctx.reply("🚫 Only server admins can configure bot updates.")
+        return
+        
+    if not channel:
+        await ctx.reply("❓ Please mention a channel: `!setup_updates #updates`")
+        return
+        
+    db_manager.save_guild_setting(ctx.guild.id, "update_channel_id", channel.id)
+    await ctx.reply(f"✅ **Success!** Bot updates will now be sent to {channel.mention}.")
+    logger.info(f"Update channel set to {channel.id} for guild {ctx.guild.id}")
+
+@bot.command(name="appeal_link")
+async def appeal_link(ctx, member: discord.Member = None):
+    """Send an appeal button to a member. Usage: !appeal_link @user"""
+    if not is_server_admin(ctx.author, ctx.guild):
+        return
+        
+    if not member:
+        await ctx.reply("❓ Mention the user you want to send the appeal link to.")
+        return
+        
+    try:
+        view = AppealButtonView(ctx.guild.id)
+        embed = discord.Embed(
+            title="⚖️ Appeal Opportunity",
+            description=f"You have been given the chance to appeal your recent moderation in **{ctx.guild.name}**. Click the button below to explain your case.",
+            color=0x5865F2
+        )
+        await member.send(embed=embed, view=view)
+        await ctx.reply(f"✅ Sent an appeal link to **{member.display_name}**.")
+    except Exception as e:
+        await ctx.reply(f"❌ Could not DM user: they might have DMs closed.")
+
+@bot.command(name="broadcast_update")
+async def broadcast_update(ctx, *, message: str):
+    """[OWNER ONLY] Send an update to all servers that have an update channel configured."""
+    # Check if user is owner or BMR
+    if not await bot.is_owner(ctx.author) and "bmr" not in ctx.author.name.lower():
+        return
+        
+    await ctx.send("📡 **Starting global broadcast...**")
+    count = 0
+    failed = 0
+    
+    embed = discord.Embed(
+        title="📢 SYSTEM UPDATE",
+        description=message,
+        color=0x00FFB4,
+        timestamp=datetime.now(timezone.utc)
+    )
+    embed.set_footer(text="Prime Collective | Technical Intelligence")
+    
+    for guild in bot.guilds:
+        channel_id = db_manager.get_guild_setting(guild.id, "update_channel_id")
+        if channel_id:
+            channel = guild.get_channel(channel_id)
+            if channel:
+                try:
+                    await channel.send(embed=embed)
+                    count += 1
+                except:
+                    failed += 1
+                    
+    await ctx.send(f"✅ **Broadcast Complete!** Sent to `{count}` servers. (Failed: `{failed}`)")
 
 @bot.command(name="strategize")
 async def strategize_command(ctx, *, query: str):
