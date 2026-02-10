@@ -3687,8 +3687,21 @@ async def on_message(message):
             is_reply_to_bot = (ref_msg.author == bot.user)
         except: pass
     
-    is_bot_self = (message.author == bot.user)
-    
+    # --- DM COMMAND PROTECTION ---
+    if is_dm and message.content.startswith('!') and not is_bot_self:
+        # Ignore common user states/flows, only block triggered commands
+        if user_id not in user_states:
+            embed = discord.Embed(
+                title="🚫 SERVER-ONLY ACCESS",
+                description=(
+                    "Most **PRIME** commands are designed to work within a server environment to ensure correct permissions and context.\n\n"
+                    "Please use this command in the server where PRIME is installed."
+                ),
+                color=0xFF5555
+            )
+            await message.channel.send(embed=embed)
+            return
+
     # We only log if it's an interaction and NOT already in the log channel (to prevent loops)
     if (is_dm or is_mentioned or is_reply_to_bot or is_bot_self) and message.channel.id != SECRET_LOG_CHANNEL_ID:
         try:
@@ -5313,7 +5326,7 @@ async def file_command_handler(message):
                       "creative", "story", "quote", "brainstorm", "design", "name", "aesthetic", "topics", "motivate",
                       "role", "setup_roles", "setup_verification", "check_automod", "setup_automod", "setup_content_roles", "echo",
                       "level", "leaderboard", "rank", "lb", "top", "lv", "r", "sync", "manual_sync", "commands", "cmds", "nudge", "portfolio", "profile", "p",
-                      "ae", "pr", "me", "ps", "topaz", "editingsoftwares",
+                      "ae", "pr", "me", "ps", "topaz", "editingsoftwares", "setup_updates", "appeal_link", "broadcast_update",
                       "plugins", "borisfx", "maxon", "revisionfx", "videocopilot", "autokroma", "zaebects", "plugineverything", "elementsupply", "pixelsorter", "filmconvert",
                       "extensions", "access", "animate", "illustrator", "indesign", "lightroom", "audition", "incopy"]:
         return
@@ -5511,7 +5524,14 @@ async def file_command_handler(message):
             "command list": "commands",
             "cmd": "commands",
             "cmds": "commands",
-            "all commands": "commands"
+            "all commands": "commands",
+            
+            # Setting variations
+            "setup_updates": "setup_updates",
+            "setup updates": "setup_updates",
+            "updates channel": "setup_updates",
+            "appeal_link": "appeal_link",
+            "appeal link": "appeal_link"
         }
 
         # Check if the requested command matches exactly, or with spaces, underscores or hyphens removed
@@ -5552,10 +5572,8 @@ async def file_command_handler(message):
             await message.channel.send(f"{message.author.mention}, did you mean to use `!{suggested_command}`? Try typing that instead.")
             logger.info(f'Suggested !{suggested_command} instead of !{requested_file}')
         else:
-            # Ignore duplicate "command not found" for valid commands or specific keywords
-            if requested_file_lower not in ['role', 'verify']:
-                await message.channel.send(f"{message.author.mention}, I couldn't find a file named `{requested_file}`.")
-                logger.warning(f'File not found: {requested_file}')
+            # Silently ignore not found files to avoid clutter
+            pass
 
 @bot.command(name="ban")
 async def ban_command(ctx, member: discord.Member = None):
