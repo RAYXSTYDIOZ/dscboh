@@ -3687,6 +3687,9 @@ async def on_message(message):
             is_reply_to_bot = (ref_msg.author == bot.user)
         except: pass
     
+    user_id = message.author.id
+    is_bot_self = (message.author == bot.user)
+    
     # --- DM COMMAND PROTECTION ---
     if is_dm and message.content.startswith('!') and not is_bot_self:
         # Ignore common user states/flows, only block triggered commands
@@ -3764,7 +3767,6 @@ async def on_message(message):
             logger.error(f"Failed to ban underage user {message.author.name}: {e}")
     
     # Check if user has a pending state (waiting for response to a question)
-    user_id = message.author.id
     if user_id in user_states:
         try:
             state = user_states[user_id]
