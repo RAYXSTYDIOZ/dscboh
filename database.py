@@ -189,6 +189,19 @@ class DatabaseManager:
                     timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             ''')
+
+            # Table for Deleted Messages (The Snitch Engine)
+            create_table('''
+                CREATE TABLE IF NOT EXISTS deleted_messages (
+                    id SERIAL PRIMARY KEY,
+                    channel_id BIGINT,
+                    user_id BIGINT,
+                    username TEXT,
+                    content TEXT,
+                    attachments TEXT, -- JSON string
+                    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
             
             if not self.is_postgres:
                 cursor.execute('PRAGMA journal_mode=WAL')
@@ -542,5 +555,34 @@ class DatabaseManager:
                 conn.commit()
         except Exception as e:
             logger.error(f"Error deleting notes: {e}")
+
+    # --- Deleted Messages (The Snitch Engine) ---
+    def save_deleted_message(self, channel_id, user_id, username, content, attachments):
+        p = self.get_placeholder()
+        try:
+            with self.get_connection() as conn:
+                with self.get_cursor(conn) as cursor:
+                    cursor.execute(
+                        f'''INSERT INTO deleted_messages (channel_id, user_id, username, content, attachments) 
+                           VALUES ({p}, {p}, {p}, {p}, {p})''',
+                        (channel_id, user_id, username, content, json.dumps(attachments))
+                    )
+                conn.commit()
+        except Exception as e:
+            logger.error(f"Error saving deleted message: {e}")
+
+    def get_latest_deleted_messages(self, channel_id, limit=3):
+        p = self.get_placeholder()
+        try:
+            with self.get_connection() as conn:
+                with self.get_cursor(conn) as cursor:
+                    cursor.execute(
+                        f'SELECT user_id, username, content, attachments, timestamp FROM deleted_messages WHERE channel_id = {p} ORDER BY timestamp DESC LIMIT {p}',
+                        (channel_id, limit)
+                    )
+                    return cursor.fetchall()
+        except Exception as e:
+            logger.error(f"Error getting deleted messages: {e}")
+            return []
 
 db_manager = DatabaseManager()

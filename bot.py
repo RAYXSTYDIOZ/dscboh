@@ -1924,6 +1924,30 @@ async def leveling_handler(message):
 
 
 @bot.event
+async def on_message_delete(message):
+    """Capture deleted messages for Spectral Interception (The Snitch Engine)."""
+    if message.author.bot:
+        return
+        
+    attachments = []
+    if message.attachments:
+        for att in message.attachments:
+            attachments.append({
+                "url": att.url,
+                "filename": att.filename,
+                "content_type": att.content_type
+            })
+            
+    db_manager.save_deleted_message(
+        message.channel.id,
+        message.author.id,
+        message.author.name,
+        message.content or "",
+        attachments
+    )
+    logger.info(f"Captured deleted message from {message.author.name} in {message.channel.id}")
+
+@bot.event
 async def on_member_remove(member):
     """Log member leaves for security tracking."""
     logger.info(f"Member left {member.guild.name}: {member.name}")
@@ -4438,13 +4462,58 @@ async def leaderboard_command(ctx):
             user_rank = i
             break
     
-    user_data = user_levels.get(ctx.author.id, {"level": 0, "xp": 0})
-    embed.set_footer(text=f"Your Position: #{user_rank} | Level: {user_data['level']} | Keep it up.")
-    
-    if ctx.guild.icon:
-        embed.set_author(name=f"{ctx.guild.name} Hall of Fame", icon_url=ctx.guild.icon.url)
-
     await ctx.send(embed=embed)
+
+@bot.command(name="intercept", aliases=["snitch", "sniff"])
+async def intercept_command(ctx):
+    """Spectral Interception: Spend 500 XP to reveal the last deleted message in this channel."""
+    cost = 500
+    user_id = ctx.author.id
+    
+    # Check if user has enough XP
+    if user_id not in user_levels or user_levels[user_id]["xp"] < cost:
+        await ctx.reply(f"🚫 **ACCESS DENIED**: You need at least `{cost} XP` to intercept spectral data.")
+        return
+        
+    # Get latest deleted message
+    deleted = db_manager.get_latest_deleted_messages(ctx.channel.id, limit=1)
+    
+    if not deleted:
+        await ctx.reply("🌑 **No spectral traces found.** This channel is clean.")
+        return
+        
+    msg_user_id, msg_username, content, attachments_json, timestamp = deleted[0]
+    attachments = json.loads(attachments_json) if attachments_json else []
+    
+    # Deduct XP
+    user_levels[user_id]["xp"] -= cost
+    db_manager.save_level(user_id, user_levels[user_id]["xp"], user_levels[user_id]["level"])
+    
+    # Aesthetic Reveal
+    embed = discord.Embed(
+        title="🕵️  SPECTRAL INTERCEPTION SUCCESSFUL",
+        description=f"*Retrieved data from the void. Cost: {cost} XP*",
+        color=0xFF00FF # Neon Magenta/Purple
+    )
+    
+    reveal_content = content if content else "*No text content (likely media only)*"
+    embed.add_field(name="👤 SOURCE", value=f"**{msg_username}**", inline=True)
+    embed.add_field(name="🕒 TIME", value=f"<t:{int(timestamp.timestamp())}:R>", inline=True)
+    embed.add_field(name="📝 CONTENT", value=f"```\n{reveal_content}\n```", inline=False)
+    
+    if attachments:
+        att_links = "\n".join([f"• [{a['filename']}]({a['url']})" for a in attachments])
+        embed.add_field(name="📎 ATTACHMENTS", value=att_links, inline=False)
+        # If it's an image, set it as thumbnail or image
+        for a in attachments:
+            if a.get('content_type') and a['content_type'].startswith('image'):
+                embed.set_image(url=a['url'])
+                break
+
+    embed.set_footer(text=f"Intercepted by {ctx.author.display_name} | Your XP: {user_levels[user_id]['xp']}")
+    
+    await ctx.send(embed=embed)
+    logger.info(f"{ctx.author.name} intercepted message from {msg_username}")
 async def list_files_command(ctx):
     """
     Lists all available files that can be requested.
