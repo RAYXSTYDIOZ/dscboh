@@ -20,13 +20,31 @@ class CursorContext:
 class DatabaseManager:
     def __init__(self, db_path=None):
         self.db_url = os.getenv('DATABASE_URL')
+        self.is_postgres = False
+        
         if self.db_url:
+            # Fix for Railway/Heroku postgres URLs
             if self.db_url.startswith("postgres://"):
                 self.db_url = self.db_url.replace("postgres://", "postgresql://", 1)
-            self.is_postgres = True
-            logger.info("Using PostgreSQL database.")
-        else:
-            self.is_postgres = False
+            
+            # Add SSL requirement if not present (common for Railway Postgres)
+            if "?" not in self.db_url:
+                self.db_url += "?sslmode=require"
+            elif "sslmode=" not in self.db_url:
+                self.db_url += "&sslmode=require"
+                
+            try:
+                # Test connection immediately
+                test_conn = psycopg2.connect(self.db_url)
+                test_conn.close()
+                self.is_postgres = True
+                logger.info("✅ Database: Successfully connected to PostgreSQL.")
+            except Exception as e:
+                logger.error(f"❌ Database: PostgreSQL connection failed: {e}")
+                logger.warning("⚠️ Database: Falling back to SQLite due to PostgreSQL failure.")
+                self.is_postgres = False
+
+        if not self.is_postgres:
             if db_path is None:
                 # Check environment variable for Railway/Docker volumes
                 env_path = os.getenv('DATABASE_PATH')
@@ -43,7 +61,7 @@ class DatabaseManager:
             db_dir = os.path.dirname(os.path.abspath(self.db_path))
             if db_dir and not os.path.exists(db_dir):
                 os.makedirs(db_dir, exist_ok=True)
-            logger.info(f"Using SQLite database at {self.db_path}")
+            logger.info(f"💾 Database: Using SQLite at {self.db_path}")
             
         self.init_db()
 
@@ -51,10 +69,14 @@ class DatabaseManager:
         return CursorContext(conn.cursor())
 
     def get_connection(self):
-        if self.is_postgres:
-            return psycopg2.connect(self.db_url)
-        else:
-            return sqlite3.connect(self.db_path)
+        try:
+            if self.is_postgres:
+                return psycopg2.connect(self.db_url)
+            else:
+                return sqlite3.connect(self.db_path)
+        except Exception as e:
+            logger.error(f"Critical error getting DB connection: {e}")
+            raise e
 
     def get_placeholder(self):
         return "%s" if self.is_postgres else "?"
