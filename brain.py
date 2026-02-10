@@ -55,7 +55,7 @@ def rotate_gemini_key():
     logger.info(f"🔄 Switched to API Key Position: {current_key_index + 1}")
     return True
 
-def safe_generate_content(model, contents, config=None):
+async def safe_generate_content(model, contents, config=None):
     if not GEMINI_KEYS:
         return None
     last_err = None
@@ -68,7 +68,9 @@ def safe_generate_content(model, contents, config=None):
             if config is None:
                 config = types.GenerateContentConfig(temperature=1.0)
 
-            return gemini_client.models.generate_content(
+            # Use asyncio.to_thread to prevent blocking the event loop on network I/O
+            return await asyncio.to_thread(
+                gemini_client.models.generate_content,
                 model=model,
                 contents=contents,
                 config=config
@@ -219,7 +221,7 @@ async def get_gemini_response(prompt, user_id, username=None, image_bytes=None, 
 
         if image_bytes:
             image_prompt = f"{modified_system_prompt}{user_context}\n\nAnalyze this image.\n\nUser's message: {user_question}"
-            response = safe_generate_content(
+            response = await safe_generate_content(
                 model=model if model else PRIMARY_MODEL,
                 contents=[
                     types.Part.from_bytes(data=image_bytes, mime_type="image/jpeg"),
@@ -242,7 +244,7 @@ async def get_gemini_response(prompt, user_id, username=None, image_bytes=None, 
             
             contents.append(types.Content(role="user", parts=[types.Part.from_text(text=user_question)]))
             
-            response = safe_generate_content(model=model if model else PRIMARY_MODEL, contents=contents)
+            response = await safe_generate_content(model=model if model else PRIMARY_MODEL, contents=contents)
             if not response or not response.text:
                 return "I'm having trouble thinking right now."
             
@@ -279,7 +281,7 @@ TASK:
 
 Format as JSON: {{"summary": "...", "vibe": "..."}}"""
 
-        response = safe_generate_content(
+        response = await safe_generate_content(
             model=PRIMARY_MODEL, 
             contents=reflection_prompt,
             config=types.GenerateContentConfig(response_mime_type="application/json")

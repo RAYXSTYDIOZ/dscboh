@@ -110,30 +110,39 @@ def get_env_str(key_parts, default=None):
     key = "".join(key_parts) if isinstance(key_parts, list) else key_parts
     return os.environ.get(key, default)
 
-def safe_generate_content(model, contents, config=None):
+async def safe_generate_content(model, contents, config=None):
     """Wrapper to handle API key rotation and standard model calls."""
     if not GEMINI_KEYS:
+        logger.error("❌ No API keys available in GEMINI_KEYS pool.")
         return None
         
     last_err = None
+    # Try multiple keys if rate limited
     for _ in range(len(GEMINI_KEYS)):
         try:
             if not gemini_client:
                 if not rotate_gemini_key(): break
             
+            # Default config if none provided (fast generation)
             if config is None:
-                config = types.GenerateContentConfig(temperature=1.0)
+                config = types.GenerateContentConfig(
+                    temperature=1.0
+                )
             
-            return gemini_client.models.generate_content(
+            # Use asyncio.to_thread to prevent blocking the event loop
+            return await asyncio.to_thread(
+                gemini_client.models.generate_content,
                 model=model,
                 contents=contents,
                 config=config
             )
         except Exception as e:
             last_err = e
-            if rotate_gemini_key():
-                continue
-            break
+            err_str = str(e).lower()
+            if ("429" in err_str or "exhausted" in err_str or "limit" in err_str or "401" in err_str):
+                logger.warning(f"Rate limit or auth error with key {current_key_index + 1}. Rotating...")
+                if rotate_gemini_key(): continue
+            break # Non-recoverable error
             
     if last_err: raise last_err
     return None
@@ -387,7 +396,7 @@ async def revive_chat():
         )
         
         # Use a generic user ID (0) for the automated task, but tell it it's "one of the boys"
-        response = get_gemini_response(prompt, user_id=0, username="Vibes", model=FALLBACK_MODEL)
+        response = await get_gemini_response(prompt, user_id=0, username="Vibes", model=FALLBACK_MODEL)
         
         if response and "BMR" not in response:
             # Clean response of backticks or extra formatting if Gemini adds them
@@ -425,7 +434,7 @@ async def daily_insight():
             "Tone: Chill, expert, direct. No 'top 10' list stuff. Just one deep-cut tip. "
             "Format it with a clean title and clear steps. No robot talk."
         )
-        response = get_gemini_response(prompt, user_id=0, username="Elite", model=FALLBACK_MODEL)
+        response = await get_gemini_response(prompt, user_id=0, username="Elite", model=FALLBACK_MODEL)
         if response:
             header = "💡 **Today's Elite Insight**"
             await channel.send(f"{header}\n\n{response}")
@@ -464,7 +473,7 @@ async def creative_pulse():
             "Tone: Chill, direct, high-tier partner. NO robot talk. Use lowercase naturally. "
             "Example: 'vibe is high today, glad to see everyone finally figuring out the new tools.' or 'chat is cookin, keep that energy up for the new week.'"
         )
-        response = get_gemini_response(prompt, user_id=0, username="System", model=FALLBACK_MODEL)
+        response = await get_gemini_response(prompt, user_id=0, username="System", model=FALLBACK_MODEL)
         if response:
             await channel.send(f"🌊 {response}")
             logger.info("Sent creative pulse update.")
@@ -1044,7 +1053,7 @@ async def moderate_topic_and_vibe(message):
             }}
             """
             
-            response = safe_generate_content(model=PRIMARY_MODEL, contents=[prompt])
+            response = await safe_generate_content(model=FALLBACK_MODEL, contents=[prompt])
             if not response or not response.text:
                 return False
                 
@@ -1094,7 +1103,7 @@ async def check_and_moderate_spam(message):
         
         is_spam, spam_reason = detect_spam(message.content)
         if not is_spam:
-            return
+            return False
         
         user_id = message.author.id
         current_time = datetime.now(timezone.utc)
@@ -1132,9 +1141,12 @@ async def check_and_moderate_spam(message):
             # Reset spam tracker after global warning
             spam_tracker[user_id]["count"] = 0
             logger.info(f"Global warning issued to {message.author.name} for spam")
+        
+        return True
     
     except Exception as e:
         logger.error(f"Error in spam moderation: {str(e)}")
+        return False
 
 def detect_invite_links(content):
     """Detect Discord invite links in message."""
@@ -1244,7 +1256,7 @@ async def handle_automatic_media_review(message):
                     
                     if is_image:
                         image_bytes = await download_image(attachment.url)
-                        response = get_gemini_response(prompt, message.author.id, username=message.author.name, image_bytes=image_bytes)
+                        response = await get_gemini_response(prompt, message.author.id, username=message.author.name, image_bytes=image_bytes)
                     elif is_video:
                         video_bytes, error = await download_video(attachment.url, attachment.filename)
                         if video_bytes:
@@ -1285,7 +1297,7 @@ async def handle_automatic_resources(message):
             async with message.channel.typing():
                 # Use Gemini to extract a clean search query for more accuracy
                 extraction_prompt = f"Extract only the asset/resource name from this request: '{message.content}'. Remove words like 'a', 'an', 'the', 'some', 'any', 'i need', 'find me', etc. Just return the clean noun, e.g., 'cloud png' or 'vibe sfx'."
-                query_res = safe_generate_content(model=FALLBACK_MODEL, contents=[extraction_prompt])
+                query_res = await safe_generate_content(model=FALLBACK_MODEL, contents=[extraction_prompt])
                 search_query = query_res.text.strip() if query_res and query_res.text else message.content
                 search_query = search_query.replace('"', '').replace("'", "") # Clean quotes
                 
@@ -1334,7 +1346,7 @@ async def handle_automatic_resources(message):
                 # Use a cleaner prompt system to bypass the 'creative partner' lecturing
                 # We prepend a instruction to stop the chat vibing
                 clean_prompt = f"[SYSTEM: RESPOND BRIEFLY WITH LINKS ONLY. NO DESIGN LECTURES.] {prompt}"
-                response = get_gemini_response(clean_prompt, message.author.id, username=message.author.name, model=FALLBACK_MODEL)
+                response = await get_gemini_response(clean_prompt, message.author.id, username=message.author.name, model=FALLBACK_MODEL)
                 
                 if response:
                     header = random.choice([
@@ -1417,7 +1429,7 @@ async def handle_automatic_motivation(message):
                         "Tell them about the 'ugly phase' of a project or how the best work comes from the most frustration. "
                         "No robot talk. One or two sentences max."
                     )
-                    response = get_gemini_response(prompt, message.author.id, username=message.author.name, model=FALLBACK_MODEL)
+                    response = await get_gemini_response(prompt, message.author.id, username=message.author.name, model=FALLBACK_MODEL)
                     if response:
                         await message.reply(f"🌊 **Steady your flow.**\n\n{response}")
                         return True
@@ -1513,12 +1525,12 @@ async def analyze_image_content(image_url):
         )
 
         # Model Selection - Fallback list
-        models_to_try = [PRIMARY_MODEL, "gemini-2.0-flash", "gemini-1.5-flash-latest"]
+        models_to_try = ["gemini-1.5-flash-latest", "gemini-2.0-flash", PRIMARY_MODEL]
         last_error = None
 
         for model_name in models_to_try:
             try:
-                response = safe_generate_content(
+                response = await safe_generate_content(
                     model=model_name,
                     contents=[
                         types.Part.from_bytes(data=image_data, mime_type="image/jpeg"),
@@ -1577,12 +1589,12 @@ async def check_video_safety(video_bytes, filename):
             "Analyze this video strictly for moderation. Check for NSFW, nudity, sex, gore, extreme violence, or scams. "
             "Reply with ONLY JSON format: {\"is_bad\": true/false, \"severity\": \"SEVERE\" or \"MEDIUM\", \"reason\": \"...\"}"
         )
-        models_to_try = [PRIMARY_MODEL, "gemini-2.0-flash-latest", "gemini-2.0-flash-exp", "gemini-1.5-flash-latest"]
+        models_to_try = ["gemini-1.5-flash-latest", "gemini-2.0-flash-latest", PRIMARY_MODEL]
         last_error = None
 
         for model_name in models_to_try:
             try:
-                response = safe_generate_content(
+                response = await safe_generate_content(
                     model=model_name,
                     contents=[
                         types.Part.from_bytes(data=video_bytes, mime_type=mime_type),
@@ -1988,7 +2000,7 @@ async def analyze_video(video_bytes, filename, user_id):
 Be specific with menu locations and techniques. Assume the user is editing in Adobe Premiere Pro or After Effects."""
         
         # Send video to Gemini for analysis
-        response = safe_generate_content(
+        response = await safe_generate_content(
             model=PRIMARY_MODEL,
             contents=[
                 types.Part.from_bytes(
@@ -2037,7 +2049,7 @@ async def update_user_personality(user_id, username):
         """
         
         # Use a faster model for the background update
-        response = safe_generate_content(model=FALLBACK_MODEL, contents=[prompt])
+        response = await safe_generate_content(model=FALLBACK_MODEL, contents=[prompt])
         if response and response.text:
             res_text = response.text.strip()
             if "```json" in res_text:
@@ -2074,7 +2086,7 @@ Your task is to break down complex problems into strategic phases.
 - Suggest the most efficient path forward.
 - Tone: Strategic, analytical, and confident."""
 
-def get_gemini_response(prompt, user_id, username=None, image_bytes=None, is_tutorial=False, software=None, brief=False, model=None, mode=None, use_thought=False):
+async def get_gemini_response(prompt, user_id, username=None, image_bytes=None, is_tutorial=False, software=None, brief=False, model=None, mode=None, use_thought=False):
     """Get response from Gemini AI with optional image analysis and persistent memory."""
     try:
         # 1. Load User Memory from Database
@@ -2121,7 +2133,7 @@ def get_gemini_response(prompt, user_id, username=None, image_bytes=None, is_tut
             image_prompt = f"{modified_system_prompt}{user_context}\n\nThe user has sent an image. Analyze it carefully and help them.{detailed_instructions}\n\nUser's message: {user_question}"
             
             # Use the new google-genai SDK format for image analysis
-            response = safe_generate_content(
+            response = await safe_generate_content(
                 model=model if model else PRIMARY_MODEL,
                 contents=[
                     types.Part.from_bytes(
@@ -2172,7 +2184,7 @@ def get_gemini_response(prompt, user_id, username=None, image_bytes=None, is_tut
                     # Prepare contents list
                     current_contents = history + [{"role": "user", "parts": [{"text": prompt}]}]
                     
-                    response = safe_generate_content(
+                    response = await safe_generate_content(
                         model=model_name,
                         contents=current_contents,
                         config=types.GenerateContentConfig(
@@ -2258,7 +2270,7 @@ async def reflect_on_user(user_id, username, latest_user_msg, latest_bot_res):
         """
 
         # Use main model for consistency or a fallback if needed
-        response = safe_generate_content(
+        response = await safe_generate_content(
             model=PRIMARY_MODEL, 
             contents=reflection_prompt,
             config=types.GenerateContentConfig(response_mime_type="application/json")
@@ -3068,7 +3080,7 @@ async def verify_youtube_proof(message, min_subs):
         }}
         """
         
-        response = safe_generate_content(
+        response = await safe_generate_content(
             model=PRIMARY_MODEL,
             contents=[
                 types.Part.from_bytes(data=image_bytes, mime_type="image/jpeg"),
@@ -3700,7 +3712,7 @@ async def on_message(message):
                 # Now provide the BRIEF tutorial response
                 prompt = state['original_question']
                 async with message.channel.typing():
-                    response = get_gemini_response(prompt, user_id, username=message.author.name, is_tutorial=True, software=software, brief=True, model="gemini-1.5-flash")
+                    response = await get_gemini_response(prompt, user_id, username=message.author.name, is_tutorial=True, software=software, brief=True, model="gemini-1.5-flash")
                 logger.info(f"Generated brief response (length: {len(response)})")
                 
                 if response and not response.strip().endswith('?'):
@@ -3846,7 +3858,7 @@ async def on_message(message):
                 user_message = message.content.lower().strip()
                 if any(word in user_message for word in ['yes', 'yeah', 'yep', 'sure', 'ok', 'okay', 'please', 'y', 'more']):
                     async with message.channel.typing():
-                        response = get_gemini_response(state['original_question'], user_id, username=message.author.name, is_tutorial=True, software=state['software'], brief=False)
+                        response = await get_gemini_response(state['original_question'], user_id, username=message.author.name, is_tutorial=True, software=state['software'], brief=False)
                     if len(response) <= 1900:
                         await message.reply(response)
                     else:
@@ -3884,13 +3896,14 @@ async def on_message(message):
         return
     
     # Check for spam and moderate
-    await check_and_moderate_spam(message)
+    if await check_and_moderate_spam(message):
+        return
     
-    # Check for political/chaotic conversation flow
-    await moderate_topic_and_vibe(message)
+    # Check for political/chaotic conversation flow (RUN IN BACKGROUND - NON-BLOCKING)
+    asyncio.create_task(moderate_topic_and_vibe(message))
     
-    # Check server security (invites, suspicious behavior)
-    await check_server_security(message)
+    # Check server security (invites, suspicious behavior) (RUN IN BACKGROUND - NON-BLOCKING)
+    asyncio.create_task(check_server_security(message))
     
     # Trigger AI feedback on WIPs/Media automatically
     if await handle_automatic_media_review(message):
@@ -4024,7 +4037,7 @@ async def on_message(message):
                         'software': mentioned_software
                     }
                     async with message.channel.typing():
-                        response = get_gemini_response(prompt_lower, user_id, username=message.author.name, is_tutorial=True, software=mentioned_software, brief=True, model="gemini-1.5-flash")
+                        response = await get_gemini_response(prompt_lower, user_id, username=message.author.name, is_tutorial=True, software=mentioned_software, brief=True, model="gemini-1.5-flash")
                     
                     if response and not response.strip().endswith('?'):
                         response = response.strip() + "\n\nWant a detailed step-by-step explanation?"
@@ -4054,7 +4067,7 @@ async def on_message(message):
                     # Generate roast
                     roast_prompt = f"Roast this user: {target_to_roast.name}. Be savage, funny, and direct. Context: {message.content}"
                     # Use a clean prompt to avoid the bot getting confused by the 'reply' context
-                    response = get_gemini_response(roast_prompt, message.author.id, username=message.author.name)
+                    response = await get_gemini_response(roast_prompt, message.author.id, username=message.author.name)
                     
                     # Send response mentioning the target (Not a reply to the author)
                     await message.channel.send(f"{target_to_roast.mention} {response}")
@@ -4141,10 +4154,10 @@ async def on_message(message):
                     response = await analyze_video(video_bytes, video_filename, message.author.id)
                 elif image_bytes:
                     # Analyze image
-                    response = get_gemini_response(prompt, message.author.id, username=message.author.name, image_bytes=image_bytes)
+                    response = await get_gemini_response(prompt, message.author.id, username=message.author.name, image_bytes=image_bytes)
                 else:
                     # Regular text response
-                    response = get_gemini_response(prompt, message.author.id, username=message.author.name, image_bytes=None)
+                    response = await get_gemini_response(prompt, message.author.id, username=message.author.name, image_bytes=None)
             
             # --- CODE EXPORT ---
             # Detect and extract code blocks for file attachment
@@ -4752,7 +4765,7 @@ async def ask_command(ctx, *, question=None):
         return
     async with ctx.typing():
         prompt = f"Provide a comprehensive, detailed answer to this question: {question}"
-        response = get_gemini_response(prompt, ctx.author.id, username=ctx.author.name)
+        response = await get_gemini_response(prompt, ctx.author.id, username=ctx.author.name)
         chunks = [response[i:i+1900] for i in range(0, len(response), 1900)]
         for chunk in chunks:
             await ctx.send(chunk)
@@ -4838,7 +4851,7 @@ async def explain_command(ctx, *, topic=None):
         return
     async with ctx.typing():
         prompt = f"Explain '{topic}' in simple, easy-to-understand language. Make it clear for beginners."
-        response = get_gemini_response(prompt, ctx.author.id, username=ctx.author.name)
+        response = await get_gemini_response(prompt, ctx.author.id, username=ctx.author.name)
         chunks = [response[i:i+1900] for i in range(0, len(response), 1900)]
         for chunk in chunks:
             await ctx.send(chunk)
@@ -4851,7 +4864,7 @@ async def improve_command(ctx, *, text=None):
         return
     async with ctx.typing():
         prompt = f"Enhance and improve this text. Make it better, clearer, more engaging, and more professional: {text}"
-        response = get_gemini_response(prompt, ctx.author.id, username=ctx.author.name)
+        response = await get_gemini_response(prompt, ctx.author.id, username=ctx.author.name)
         chunks = [response[i:i+1900] for i in range(0, len(response), 1900)]
         for chunk in chunks:
             await ctx.send(chunk)
@@ -4864,7 +4877,7 @@ async def rewrite_command(ctx, *, text=None):
         return
     async with ctx.typing():
         prompt = f"Rewrite this text in a more creative, engaging, and professional way: {text}"
-        response = get_gemini_response(prompt, ctx.author.id, username=ctx.author.name)
+        response = await get_gemini_response(prompt, ctx.author.id, username=ctx.author.name)
         chunks = [response[i:i+1900] for i in range(0, len(response), 1900)]
         for chunk in chunks:
             await ctx.send(chunk)
@@ -4877,7 +4890,7 @@ async def summarize_command(ctx, *, text=None):
         return
     async with ctx.typing():
         prompt = f"Summarize this text into a short, clear summary that captures all key points: {text}"
-        response = get_gemini_response(prompt, ctx.author.id, username=ctx.author.name)
+        response = await get_gemini_response(prompt, ctx.author.id, username=ctx.author.name)
         chunks = [response[i:i+1900] for i in range(0, len(response), 1900)]
         for chunk in chunks:
             await ctx.send(chunk)
@@ -4890,7 +4903,7 @@ async def analyze_command(ctx, *, content=None):
         return
     async with ctx.typing():
         prompt = f"Analyze this content deeply and provide detailed insights, breakdowns, and observations: {content}"
-        response = get_gemini_response(prompt, ctx.author.id, username=ctx.author.name)
+        response = await get_gemini_response(prompt, ctx.author.id, username=ctx.author.name)
         chunks = [response[i:i+1900] for i in range(0, len(response), 1900)]
         for chunk in chunks:
             await ctx.send(chunk)
@@ -4903,7 +4916,7 @@ async def idea_command(ctx, *, topic=None):
         return
     async with ctx.typing():
         prompt = f"Generate 5 creative, unique ideas for: {topic}. Make them specific, actionable, and interesting."
-        response = get_gemini_response(prompt, ctx.author.id, username=ctx.author.name)
+        response = await get_gemini_response(prompt, ctx.author.id, username=ctx.author.name)
         chunks = [response[i:i+1900] for i in range(0, len(response), 1900)]
         for chunk in chunks:
             await ctx.send(chunk)
@@ -4916,7 +4929,7 @@ async def define_command(ctx, *, word=None):
         return
     async with ctx.typing():
         prompt = f"Provide a clear, concise definition of '{word}' with an example of how it's used."
-        response = get_gemini_response(prompt, ctx.author.id, username=ctx.author.name)
+        response = await get_gemini_response(prompt, ctx.author.id, username=ctx.author.name)
         chunks = [response[i:i+1900] for i in range(0, len(response), 1900)]
         for chunk in chunks:
             await ctx.send(chunk)
@@ -4929,7 +4942,7 @@ async def prime_command(ctx, *, query=None):
         return
     async with ctx.typing():
         prompt = f"Help with this request in the most useful way possible: {query}"
-        response = get_gemini_response(prompt, ctx.author.id, username=ctx.author.name)
+        response = await get_gemini_response(prompt, ctx.author.id, username=ctx.author.name)
         chunks = [response[i:i+1900] for i in range(0, len(response), 1900)]
         for chunk in chunks:
             await ctx.send(chunk)
@@ -4942,7 +4955,7 @@ async def fix_command(ctx, *, text=None):
         return
     async with ctx.typing():
         prompt = f"Correct all grammar, spelling, and grammatical mistakes in this text. Return only the corrected text: {text}"
-        response = get_gemini_response(prompt, ctx.author.id, username=ctx.author.name)
+        response = await get_gemini_response(prompt, ctx.author.id, username=ctx.author.name)
         await ctx.send(response)
 
 @bot.command(name="shorten")
@@ -4953,7 +4966,7 @@ async def shorten_command(ctx, *, text=None):
         return
     async with ctx.typing():
         prompt = f"Make this text shorter and more concise while keeping all the important meaning: {text}"
-        response = get_gemini_response(prompt, ctx.author.id, username=ctx.author.name)
+        response = await get_gemini_response(prompt, ctx.author.id, username=ctx.author.name)
         await ctx.send(response)
 
 @bot.command(name="expand")
@@ -4964,7 +4977,7 @@ async def expand_command(ctx, *, text=None):
         return
     async with ctx.typing():
         prompt = f"Expand this text by adding more detail, depth, and clarity. Make it richer and more comprehensive: {text}"
-        response = get_gemini_response(prompt, ctx.author.id, username=ctx.author.name)
+        response = await get_gemini_response(prompt, ctx.author.id, username=ctx.author.name)
         await ctx.send(response)
 
 @bot.command(name="caption")
@@ -4975,7 +4988,7 @@ async def caption_command(ctx, *, topic=None):
         return
     async with ctx.typing():
         prompt = f"Create 3 engaging, catchy captions for a reel/video/post about: {topic}. Make them fun, relevant, and include relevant hashtags."
-        response = get_gemini_response(prompt, ctx.author.id, username=ctx.author.name)
+        response = await get_gemini_response(prompt, ctx.author.id, username=ctx.author.name)
         await ctx.send(response)
 
 @bot.command(name="script")
@@ -4986,7 +4999,7 @@ async def script_command(ctx, *, idea=None):
         return
     async with ctx.typing():
         prompt = f"Write a short, engaging script or dialogue for: {idea}. Make it natural, interesting, and ready to use."
-        response = get_gemini_response(prompt, ctx.author.id, username=ctx.author.name)
+        response = await get_gemini_response(prompt, ctx.author.id, username=ctx.author.name)
         await ctx.send(response)
 
 @bot.command(name="format")
@@ -4997,7 +5010,7 @@ async def format_command(ctx, *, text=None):
         return
     async with ctx.typing():
         prompt = f"Format this text into a clean, well-structured format using bullet points or sections as appropriate: {text}"
-        response = get_gemini_response(prompt, ctx.author.id, username=ctx.author.name)
+        response = await get_gemini_response(prompt, ctx.author.id, username=ctx.author.name)
         await ctx.send(response)
 
 @bot.command(name="title")
@@ -5008,7 +5021,7 @@ async def title_command(ctx, *, content=None):
         return
     async with ctx.typing():
         prompt = f"Generate 5 creative, catchy, and attractive title options for: {content}. Make them engaging and click-worthy."
-        response = get_gemini_response(prompt, ctx.author.id, username=ctx.author.name)
+        response = await get_gemini_response(prompt, ctx.author.id, username=ctx.author.name)
         await ctx.send(response)
 
 @bot.command(name="translate")
@@ -5019,7 +5032,7 @@ async def translate_command(ctx, *, text=None):
         return
     async with ctx.typing():
         prompt = f"Translate this text as requested: {text}. Provide only the translation."
-        response = get_gemini_response(prompt, ctx.author.id, username=ctx.author.name)
+        response = await get_gemini_response(prompt, ctx.author.id, username=ctx.author.name)
         await ctx.send(response)
 
 @bot.command(name="paragraph")
@@ -5030,7 +5043,7 @@ async def paragraph_command(ctx, *, text=None):
         return
     async with ctx.typing():
         prompt = f"Turn this messy text into a clean, well-structured, professional paragraph: {text}"
-        response = get_gemini_response(prompt, ctx.author.id, username=ctx.author.name)
+        response = await get_gemini_response(prompt, ctx.author.id, username=ctx.author.name)
         await ctx.send(response)
 
 # --- SLASH COMMANDS (Modern Interactions) ---
@@ -5047,7 +5060,7 @@ async def slash_prime(interaction: discord.Interaction, query: str):
     await interaction.response.defer()
     try:
         prompt = f"Help with this request in the most useful way possible: {query}"
-        response = get_gemini_response(prompt, interaction.user.id, username=interaction.user.name)
+        response = await get_gemini_response(prompt, interaction.user.id, username=interaction.user.name)
         
         # Split response into chunks if it's too long
         chunks = [response[i:i+1900] for i in range(0, len(response), 1900)]
@@ -5755,7 +5768,7 @@ async def emoji_command(ctx, *, text: str = None):
     
     try:
         prompt = f"Suggest 5 relevant emojis for: {text}. Just list the emojis separated by space."
-        response = get_gemini_response(prompt, ctx.author.id, username=ctx.author.name)
+        response = await get_gemini_response(prompt, ctx.author.id, username=ctx.author.name)
         await ctx.send(f"😊 **Emojis for '{text}'**: {response[:100]}")
     except Exception as e:
         await ctx.send(f"❌ Error: {str(e)}")
@@ -5913,7 +5926,7 @@ async def creative_command(ctx, *, topic: str = None):
     
     try:
         prompt = f"Generate 5 creative and unique ideas, prompts, or concepts for: {topic}. Be imaginative and innovative."
-        response = get_gemini_response(prompt, ctx.author.id, username=ctx.author.name)
+        response = await get_gemini_response(prompt, ctx.author.id, username=ctx.author.name)
         await ctx.send(f"💡 **Creative Ideas for '{topic}'**:\n{response[:1900]}")
     except Exception as e:
         await ctx.send(f"❌ Error: {str(e)}")
@@ -5927,7 +5940,7 @@ async def story_command(ctx, *, prompt: str = None):
     
     try:
         gemini_prompt = f"Write a creative short story (3-4 paragraphs) based on: {prompt}"
-        response = get_gemini_response(gemini_prompt, ctx.author.id, username=ctx.author.name)
+        response = await get_gemini_response(gemini_prompt, ctx.author.id, username=ctx.author.name)
         await ctx.send(f"📖 **Story**: {response[:1900]}")
     except Exception as e:
         await ctx.send(f"❌ Error: {str(e)}")
@@ -5941,7 +5954,7 @@ async def quote_command(ctx, style: str = None):
     
     try:
         prompt = f"Generate an original {style} quote that is meaningful and memorable."
-        response = get_gemini_response(prompt, ctx.author.id, username=ctx.author.name)
+        response = await get_gemini_response(prompt, ctx.author.id, username=ctx.author.name)
         await ctx.send(f"✨ **Quote**: {response[:500]}")
     except Exception as e:
         await ctx.send(f"❌ Error: {str(e)}")
@@ -5955,7 +5968,7 @@ async def brainstorm_command(ctx, *, topic: str = None):
     
     try:
         prompt = f"Brainstorm 8 creative and practical ideas for: {topic}. List them clearly with brief explanations."
-        response = get_gemini_response(prompt, ctx.author.id, username=ctx.author.name)
+        response = await get_gemini_response(prompt, ctx.author.id, username=ctx.author.name)
         await ctx.send(f"🧠 **Brainstorm Results**:\n{response[:1900]}")
     except Exception as e:
         await ctx.send(f"❌ Error: {str(e)}")
@@ -5969,7 +5982,7 @@ async def design_command(ctx, *, project: str = None):
     
     try:
         prompt = f"Suggest 5 design themes, color schemes, and layout ideas for: {project}. Be specific and modern."
-        response = get_gemini_response(prompt, ctx.author.id, username=ctx.author.name)
+        response = await get_gemini_response(prompt, ctx.author.id, username=ctx.author.name)
         await ctx.send(f"🎨 **Design Suggestions**:\n{response[:1900]}")
     except Exception as e:
         await ctx.send(f"❌ Error: {str(e)}")
@@ -5983,7 +5996,7 @@ async def name_command(ctx, category: str = None):
     
     try:
         prompt = f"Generate 10 creative, catchy, and memorable {category} names. They should be unique and cool."
-        response = get_gemini_response(prompt, ctx.author.id, username=ctx.author.name)
+        response = await get_gemini_response(prompt, ctx.author.id, username=ctx.author.name)
         await ctx.send(f"✍️ **Name Ideas**:\n{response[:1900]}")
     except Exception as e:
         await ctx.send(f"❌ Error: {str(e)}")
@@ -5997,7 +6010,7 @@ async def aesthetic_command(ctx, style: str = None):
     
     try:
         prompt = f"Suggest a complete {style} aesthetic with: color palette (hex codes), typography, mood, and design elements."
-        response = get_gemini_response(prompt, ctx.author.id, username=ctx.author.name)
+        response = await get_gemini_response(prompt, ctx.author.id, username=ctx.author.name)
         await ctx.send(f"🎭 **{style.title()} Aesthetic**:\n{response[:1900]}")
     except Exception as e:
         await ctx.send(f"❌ Error: {str(e)}")
@@ -6078,7 +6091,7 @@ async def topics_command(ctx, context: str = None):
     
     try:
         prompt = f"Generate 10 interesting and engaging topics for: {context}. Make them relevant and trending."
-        response = get_gemini_response(prompt, ctx.author.id, username=ctx.author.name)
+        response = await get_gemini_response(prompt, ctx.author.id, username=ctx.author.name)
         await ctx.send(f"📋 **Topic Ideas**:\n{response[:1900]}")
     except Exception as e:
         await ctx.send(f"❌ Error: {str(e)}")
@@ -6088,7 +6101,7 @@ async def motivate_command(ctx):
     """Send motivational messages"""
     try:
         prompt = "Generate a short, powerful motivational message that will inspire someone to take action today."
-        response = get_gemini_response(prompt, ctx.author.id, username=ctx.author.name)
+        response = await get_gemini_response(prompt, ctx.author.id, username=ctx.author.name)
         await ctx.send(f"💪 **Motivation**: {response[:500]}")
     except Exception as e:
         await ctx.send(f"❌ Error: {str(e)}")
@@ -6168,7 +6181,7 @@ async def style_helper(ctx, *, description: str = None):
             
             Be extremely technical and professional.
             """
-            response = get_gemini_response(prompt, ctx.author.id, username=ctx.author.name)
+            response = await get_gemini_response(prompt, ctx.author.id, username=ctx.author.name)
             
             embed = discord.Embed(
                 title="🦾 VFX PLUGIN STACK",
@@ -6203,7 +6216,7 @@ async def server_stats_command(ctx):
             
             Speak naturally and avoid robotic terms.
             """
-            response = get_gemini_response(prompt, ctx.author.id, username=ctx.author.name)
+            response = await get_gemini_response(prompt, ctx.author.id, username=ctx.author.name)
             
             embed = discord.Embed(
                 title="📊 SERVER REPORT",
@@ -6241,7 +6254,7 @@ async def prime_pulse(ctx):
             Be sharp and concise. Talk like a human member of the crew.
             """
             
-            summary = get_gemini_response(prompt, ctx.author.id, username=ctx.author.name, mode="briefing")
+            summary = await get_gemini_response(prompt, ctx.author.id, username=ctx.author.name, mode="briefing")
             
             embed = discord.Embed(
                 title="📡 RECENT CHAT RECAP",
@@ -6259,7 +6272,7 @@ async def think_command(ctx, *, query: str):
     """Thinking Mode: Use advanced reasoning for complex problems."""
     async with ctx.typing():
         try:
-            response = get_gemini_response(query, ctx.author.id, username=ctx.author.name, use_thought=True)
+            response = await get_gemini_response(query, ctx.author.id, username=ctx.author.name, use_thought=True)
             await ctx.send(f"🧠 **Deep Thought Analysis**:\n\n{response[:1900]}")
         except Exception as e:
             await ctx.send(BOT_ERROR_MSG)
@@ -6277,7 +6290,7 @@ async def executive_briefing(ctx):
             trends = await search_and_summarize("latest creative technology and editing trends 2026")
             
             prompt = f"Server: {ctx.guild.name}. Active Members: {active_members}. Global Trends: {trends}. Give an elite briefing."
-            response = get_gemini_response(prompt, ctx.author.id, username=ctx.author.name, mode="briefing")
+            response = await get_gemini_response(prompt, ctx.author.id, username=ctx.author.name, mode="briefing")
             
             embed = discord.Embed(
                 title="💼 EXECUTIVE BRIEFING",
@@ -6295,7 +6308,7 @@ async def strategize_command(ctx, *, query: str):
     """Decision Architect: Map out a strategic roadmap for your project."""
     async with ctx.typing():
         try:
-            response = get_gemini_response(query, ctx.author.id, username=ctx.author.name, mode="architect")
+            response = await get_gemini_response(query, ctx.author.id, username=ctx.author.name, mode="architect")
             embed = discord.Embed(
                 title="🏗️ STRATEGIC ROADMAP",
                 description=response[:4000],
@@ -6369,7 +6382,7 @@ async def clout_analysis(ctx):
                 response = await analyze_video(file_bytes, attachment.filename, ctx.author.id)
             else:
                 # Get the response text
-                response = get_gemini_response(prompt, ctx.author.id, username=ctx.author.name, image_bytes=file_bytes)
+                response = await get_gemini_response(prompt, ctx.author.id, username=ctx.author.name, image_bytes=file_bytes)
             
             # Since analyze_video returns long text, we use Gemini specifically for Clout if it's broad
             # For simplicity, we just use the response if it's descriptive enough
@@ -6413,7 +6426,7 @@ async def mimic_mode(ctx, target: discord.Member, *, prompt: str = "Hello everyo
             PROMPT: {prompt}
             """
             
-            response = get_gemini_response(mimic_prompt, ctx.author.id, username=ctx.author.name)
+            response = await get_gemini_response(mimic_prompt, ctx.author.id, username=ctx.author.name)
             await ctx.send(f"👤 **{target.display_name} (AI Mimic):** {response}")
         except Exception as e:
             await ctx.send(BOT_ERROR_MSG)
@@ -6430,7 +6443,7 @@ async def identity_report(ctx, member: discord.Member = None):
 
         summary = user_memory.get('profile_summary', 'No summary.')
         prompt = f"Convert this raw server interaction summary into a professional, highly impressive 'Creative Bio': {summary}"
-        bio = get_gemini_response(prompt, ctx.author.id, username=ctx.author.name)
+        bio = await get_gemini_response(prompt, ctx.author.id, username=ctx.author.name)
         
         # Report as file
         with tempfile.NamedTemporaryFile(suffix=".txt", delete=False, mode='w', encoding='utf-8') as tf:
@@ -6460,7 +6473,7 @@ async def chat_snipe(ctx):
     async with ctx.typing():
         # Roast or analyze the deletion
         prompt = f"The user '{msg['author']}' just deleted this message: '{msg['content']}'. Give a sharp, technical, and slightly roast-heavy analysis of why they might have deleted it or what it says about their vibe."
-        roast = get_gemini_response(prompt, ctx.author.id, username=ctx.author.name)
+        roast = await get_gemini_response(prompt, ctx.author.id, username=ctx.author.name)
         
         embed = discord.Embed(
             title="🎯 SNIPED MESSAGE",
@@ -6480,7 +6493,7 @@ async def creative_duel(ctx, opponent: discord.Member):
 
     async with ctx.typing():
         prompt = f"Generate a technical 'Creative Duel' prompt for two video editors: {ctx.author.name} and {opponent.name}. The prompt should be a specific, complex editing scenario they have to solve with words. Make it tuff."
-        duel_prompt = get_gemini_response(prompt, ctx.author.id, username=ctx.author.name)
+        duel_prompt = await get_gemini_response(prompt, ctx.author.id, username=ctx.author.name)
         
         embed = discord.Embed(
             title="⚔️ CREATIVE DUEL",
@@ -6504,7 +6517,7 @@ async def prime_match(ctx):
         # This is a sample logic - in a real bot, we'd query the DB for similar vibes
         # For now, we'll simulate a scan of the local area
         prompt = f"Based on a user with a '{my_vibe}' vibe, describe what kind of 'Creative Twin' they should look for in this server. Be technical and aesthetic-focused."
-        advice = get_gemini_response(prompt, ctx.author.id, username=ctx.author.name)
+        advice = await get_gemini_response(prompt, ctx.author.id, username=ctx.author.name)
         
         embed = discord.Embed(
             title="🧬 CREATIVE MATCHMAKER",
@@ -6539,7 +6552,7 @@ async def technical_vision(ctx):
             
             Be extremely technical and professional.
             """
-            response = get_gemini_response(prompt, ctx.author.id, username=ctx.author.name, image_bytes=image_bytes)
+            response = await get_gemini_response(prompt, ctx.author.id, username=ctx.author.name, image_bytes=image_bytes)
             
             embed = discord.Embed(
                 title="👁️ VISION ANALYSIS",
@@ -6564,7 +6577,7 @@ async def color_palette_extraction(ctx):
         try:
             image_bytes = await attachment.read()
             prompt = "Extract the 5 most dominant and aesthetically pleasing hex codes from this image. Provide them with brief names. Return ONLY the palette in a clean format."
-            response = get_gemini_response(prompt, ctx.author.id, username=ctx.author.name, image_bytes=image_bytes)
+            response = await get_gemini_response(prompt, ctx.author.id, username=ctx.author.name, image_bytes=image_bytes)
             
             embed = discord.Embed(
                 title="🎨 COLOR PALETTE",
@@ -6582,7 +6595,7 @@ async def project_structure_Report(ctx, *, type: str = "Video Edit"):
     async with ctx.typing():
         try:
             prompt = f"Generate a clean and professional folder structure for a '{type}' project. Include specific folders for Assets, Pre-comps, Audio, SFX, and Renders. Format it as a clean directory tree."
-            response = get_gemini_response(prompt, ctx.author.id, username=ctx.author.name)
+            response = await get_gemini_response(prompt, ctx.author.id, username=ctx.author.name)
             
             # Report as file for the "tuff" factor
             with tempfile.NamedTemporaryFile(suffix=".txt", delete=False, mode='w', encoding='utf-8') as tf:
@@ -6620,7 +6633,7 @@ async def technical_blueprint(ctx, *, query: str = None):
             
             Be precise and helpful.
             """
-            response = get_gemini_response(prompt, ctx.author.id, username=ctx.author.name)
+            response = await get_gemini_response(prompt, ctx.author.id, username=ctx.author.name)
             
             # Use Report logic
             with tempfile.NamedTemporaryFile(suffix=".txt", delete=False, mode='w', encoding='utf-8') as tf:
@@ -6668,7 +6681,7 @@ async def talent_scout(ctx, member: discord.Member = None):
             
             Be direct and honest.
             """
-            response = get_gemini_response(prompt, ctx.author.id, username=ctx.author.name)
+            response = await get_gemini_response(prompt, ctx.author.id, username=ctx.author.name)
             
             embed = discord.Embed(
                 title="📑 CREATOR ANALYSIS",
@@ -6701,7 +6714,7 @@ async def spectral_phantom(ctx):
             
             Be observant and sharp. Don't use robotic language.
             """
-            response = get_gemini_response(prompt, ctx.author.id, username=ctx.author.name)
+            response = await get_gemini_response(prompt, ctx.author.id, username=ctx.author.name)
             
             embed = discord.Embed(
                 title="👻 VIBE REPORT",
@@ -6724,7 +6737,7 @@ async def text_glitch(ctx, *, text: str = None):
     async with ctx.typing():
         try:
             prompt = f"Convert the following text into a 'tuff', stylized version for a discord bio: '{text}'. Use cool symbols naturally."
-            response = get_gemini_response(prompt, ctx.author.id, username=ctx.author.name)
+            response = await get_gemini_response(prompt, ctx.author.id, username=ctx.author.name)
             await ctx.send(f"⚡ **STYLED TEXT**:\n```\n{response[:1900]}\n```")
         except Exception as e:
             await ctx.send(BOT_ERROR_MSG)
@@ -6741,7 +6754,7 @@ async def aesthetic_uplift(ctx):
             
             chat_context = "\n".join(messages[::-1])
             prompt = f"Analyze this recent creative discussion: '{chat_context}'. Suggest 3 solid, technical ways to improve the quality of what's being discussed (e.g., suggesting specific plugins, techniques, or optimizations). Be helpful and direct."
-            response = get_gemini_response(prompt, ctx.author.id, username=ctx.author.name)
+            response = await get_gemini_response(prompt, ctx.author.id, username=ctx.author.name)
             
             embed = discord.Embed(
                 title="✨ QUALITY UPLIFT",
@@ -6764,7 +6777,7 @@ async def expression_sandbox(ctx, *, expression: str = None):
     async with ctx.typing():
         try:
             prompt = f"Analyze this After Effects expression: '{expression}'. 1. Detect any errors. 2. Provide an optimized version. 3. Explain the logic briefly."
-            response = get_gemini_response(prompt, ctx.author.id, username=ctx.author.name)
+            response = await get_gemini_response(prompt, ctx.author.id, username=ctx.author.name)
             
             embed = discord.Embed(
                 title="🧪 EXPRESSION ANALYSIS",
