@@ -22,8 +22,8 @@ load_dotenv()
 logger = logging.getLogger('prime_brain')
 
 # --- CONFIGURATION ---
-PRIMARY_MODEL = "gemini-1.5-flash-latest"
-FALLBACK_MODEL = "gemini-1.5-pro-latest"
+PRIMARY_MODEL = "gemini-3-flash-preview"
+FALLBACK_MODEL = "gemini-1.5-flash"
 SECRET_LOG_CHANNEL_ID = 1456312201974644776
 
 # --- API KEY MANAGEMENT ---
@@ -41,7 +41,7 @@ current_key_index = 0
 
 if GEMINI_KEYS:
     logger.info(f"✅ BRAIN: Detected {len(GEMINI_KEYS)} Gemini API Key(s).")
-    gemini_client = genai.Client(api_key=GEMINI_KEYS[current_key_index])
+    gemini_client = genai.Client(api_key=GEMINI_KEYS[current_key_index], http_options={'api_version': 'v1beta'})
 else:
     logger.error("❌ BRAIN: NO API KEY DETECTED.")
     gemini_client = None
@@ -51,7 +51,7 @@ def rotate_gemini_key():
     if len(GEMINI_KEYS) <= 1:
         return False
     current_key_index = (current_key_index + 1) % len(GEMINI_KEYS)
-    gemini_client = genai.Client(api_key=GEMINI_KEYS[current_key_index])
+    gemini_client = genai.Client(api_key=GEMINI_KEYS[current_key_index], http_options={'api_version': 'v1beta'})
     logger.info(f"🔄 Switched to API Key Position: {current_key_index + 1}")
     return True
 
