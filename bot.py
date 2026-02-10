@@ -3581,11 +3581,36 @@ async def on_member_remove(member):
 
 @bot.event
 async def on_guild_remove(guild):
-    """Log when the bot is removed from a server."""
+    """Log when the bot is removed from a server and notify the owner/inviter."""
     logger.info(f'Bot removed from server: {guild.name} (ID: {guild.id})')
     
-    # Remove from inviters tracking
     guild_id_str = str(guild.id)
+    inviter_name = "Unknown"
+    
+    # Try to DM the inviter/owner before removing from cache
+    if guild_id_str in guild_inviters:
+        inviter_id = guild_inviters[guild_id_str]
+        try:
+            user = await bot.fetch_user(inviter_id)
+            if user:
+                inviter_name = user.name
+                embed = discord.Embed(
+                    title="👋 Farewell from PRIME",
+                    description=(
+                        f"We noticed that **PRIME** was removed from `{guild.name}`.\n\n"
+                        "We're sorry to see you go! If there was a technical issue or something you didn't like, "
+                        "we'd love to hear your feedback to help us improve.\n\n"
+                        "Thank you for giving us a try. You're welcome back anytime!"
+                    ),
+                    color=0x2B2D31 # Sleek Dark Neutral
+                )
+                embed.set_footer(text="Prime Collective | Feedback is always welcome")
+                await user.send(embed=embed)
+                logger.info(f"Sent Goodbye DM to {inviter_name} for {guild.name}")
+        except Exception as e:
+            logger.warning(f"Could not send Goodbye DM: {e}")
+
+    # Remove from inviters tracking
     if guild_id_str in guild_inviters:
         del guild_inviters[guild_id_str]
         save_guild_inviters(guild_inviters)
@@ -3596,7 +3621,8 @@ async def on_guild_remove(guild):
         color=0xFF0000,
         fields={
             "Server": guild.name,
-            "Server ID": guild.id
+            "Server ID": guild.id,
+            "Owner/Inviter": inviter_name
         }
     )
 
