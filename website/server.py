@@ -119,7 +119,7 @@ async def login(request: Request):
                 {
                     "type": "connection_error",
                     "loc": ["query", "code"],
-                    "msg": "cant connect to server",
+                    "msg": "cant connected to server",
                     "input": None
                 }
             ]
