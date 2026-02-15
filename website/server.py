@@ -40,15 +40,22 @@ CLIENT_SECRET = get_env_safe("DISCORD_CLIENT_SECRET")
 BOT_TOKEN = get_env_safe("DISCORD_TOKEN")
 REDIRECT_URI = get_env_safe("DISCORD_REDIRECT_URI")
 
-# Smart Detection for Railway
+# Railway Environment Detection
+RAILWAY_DOMAIN = os.getenv("RAILWAY_PUBLIC_DOMAIN") or os.getenv("RAILWAY_STATIC_URL")
+
+# Smart Overwrite: If it's localhost but we have a Railway domain, it's definitely wrong.
+if ("localhost" in REDIRECT_URI or not REDIRECT_URI) and RAILWAY_DOMAIN:
+    # Ensure domain has no protocol for a clean join
+    clean_domain = RAILWAY_DOMAIN.replace("https://", "").replace("http://", "").rstrip("/")
+    REDIRECT_URI = f"https://{clean_domain}/callback"
+    logger.info(f"🚀 CLOUD OVERRIDE: Redirect URI forced to {REDIRECT_URI}")
+
+# Final Fallback
 if not REDIRECT_URI:
-    railway_domain = os.getenv("RAILWAY_PUBLIC_DOMAIN")
-    if railway_domain:
-        REDIRECT_URI = f"https://{railway_domain}/callback"
-        logger.info(f"✨ AUTO-DETECT: Using Railway domain for redirect: {REDIRECT_URI}")
-    else:
-        REDIRECT_URI = "http://localhost:8000/callback"
-        logger.warning("⚠️ CONFIG: No REDIRECT_URI found, defaulting to localhost.")
+    REDIRECT_URI = "http://localhost:8000/callback"
+    logger.warning("⚠️ CONFIG: Defaulting to localhost REDIRECT_URI.")
+
+logger.info(f"🎯 FINAL REDIRECT_URI: {REDIRECT_URI}")
 
 if not CLIENT_ID or not BOT_TOKEN:
     print("\n" + "!"*60)
