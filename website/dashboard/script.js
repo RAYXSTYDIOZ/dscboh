@@ -1,175 +1,389 @@
-document.addEventListener('DOMContentLoaded', async () => {
-    // Check Auth Status
-    try {
-        const response = await fetch('/api/me');
-        if (response.ok) {
-            const data = await response.json();
-            if (data.authenticated) {
-                initializeDashboard(data);
-                document.body.classList.remove('auth-pending');
-            }
+const Dashboard = {
+    token: localStorage.getItem('prime_session_token'),
+    user: null,
+    guilds: [],
+
+    async init() {
+        // Sync token from URL
+        const params = new URLSearchParams(window.location.search);
+        const newToken = params.get('session_token');
+        if (newToken) {
+            this.token = newToken;
+            localStorage.setItem('prime_session_token', newToken);
+            window.history.replaceState({}, document.title, window.location.pathname);
         }
-    } catch (error) {
-        console.error('Auth check failed:', error);
-    }
 
-    // Load dynamic stats if authenticated
-    if (!document.body.classList.contains('auth-pending')) {
-        loadStats();
-    }
-});
+        this.startClock();
+        this.bindNav();
 
-function initializeDashboard(data) {
-    const user = data.discord;
-    const internal = data.internal;
-    const guilds = data.guilds || [];
-
-    // Update Sidebar User Pill
-    const avatarImg = user.avatar
-        ? `https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.png`
-        : null;
-
-    const userPill = document.querySelector('.user-pill');
-    if (userPill) {
-        const avatarDiv = userPill.querySelector('.avatar');
-        if (avatarImg) {
-            avatarDiv.innerHTML = `<img src="${avatarImg}" style="width:100%; height:100%; border-radius:50%;">`;
+        if (this.token) {
+            await this.boot();
         } else {
-            avatarDiv.textContent = user.username.charAt(0).toUpperCase();
+            this.logout();
         }
-        userPill.querySelector('.user-name').textContent = user.username;
-        userPill.querySelector('.user-role').textContent = internal.levels.level >= 10 ? 'Elite Member' : 'System User';
-    }
+    },
 
-    // Update Welcome Title
-    const welcomeTitle = document.querySelector('.welcome-text h2 span');
-    if (welcomeTitle) {
-        welcomeTitle.textContent = user.username;
-    }
+    async boot() {
+        try {
+            const res = await fetch(`/api/me`, {
+                headers: { 'X-Session-Token': this.token }
+            });
+            if (!res.ok) throw new Error();
+            const data = await res.json();
+            if (data.authenticated) {
+                this.user = data.user;
+                this.guilds = data.guilds;
+                this.renderBase();
+                this.renderServers();
+                this.fetchSystemStats();
+                document.body.classList.add('authenticated');
+                document.body.classList.remove('loading');
+                return;
+            }
+        } catch (e) {
+            console.error("Boot sequence failed.");
+        }
+        this.logout();
+    },
 
-    const welcomeDesc = document.querySelector('.welcome-text p');
-    if (welcomeDesc) {
-        welcomeDesc.textContent = `Prime AI is currently connected to ${guilds.length} of your servers.`;
-    }
+    logout() {
+        localStorage.removeItem('prime_session_token');
+        this.token = null;
+        document.body.classList.remove('authenticated');
+        document.body.classList.remove('loading');
+    },
 
-    // Populate Guilds List
-    const guildList = document.getElementById('guildList');
-    if (guildList && guilds.length > 0) {
-        guildList.innerHTML = '';
-        guilds.slice(0, 8).forEach(guild => {
-            const iconUrl = guild.icon
-                ? `https://cdn.discordapp.com/icons/${guild.id}/${guild.icon}.png`
-                : 'https://cdn.discordapp.com/embed/avatars/0.png';
+    renderBase() {
+        document.getElementById('userName').textContent = this.user.name;
+        document.getElementById('welcomeName').textContent = this.user.name;
+        if (this.user.avatar) {
+            document.getElementById('userAvatar').src = `https://cdn.discordapp.com/avatars/${this.user.id}/${this.user.avatar}.png`;
+        } else {
+            document.getElementById('userAvatar').src = `https://cdn.discordapp.com/embed/avatars/0.png`;
+        }
+    },
 
-            const guildItem = document.createElement('div');
-            guildItem.className = 'log-item';
-            guildItem.innerHTML = `
-                <div class="log-time"><img src="${iconUrl}" style="width:30px; border-radius:8px;"></div>
-                <div class="log-content">
-                    <strong>${guild.name}</strong><br>
-                    <span style="font-size:0.8rem; opacity:0.6;">${guild.permissions_new ? 'Administrator' : 'Member'}</span>
+    renderServers() {
+        const grid = document.getElementById('guildGrid');
+        grid.innerHTML = '';
+
+        const managed = this.guilds.filter(g => (g.permissions & 0x8) || (g.permissions & 0x20));
+
+        if (managed.length === 0) {
+            grid.innerHTML = '<p style="opacity:0.3">No managed servers found.</p>';
+            return;
+        }
+
+        managed.forEach(g => {
+            const icon = g.icon ? `https://cdn.discordapp.com/icons/${g.id}/${g.icon}.png` : 'https://cdn.discordapp.com/embed/avatars/0.png';
+            const card = document.createElement('div');
+            card.className = `guild-card ${g.bot_present ? '' : 'missing'}`;
+
+            card.innerHTML = `
+                <img src="${icon}">
+                <div class="g-meta">
+                    <strong>${g.name}</strong>
+                    <div class="tag">${g.bot_present ? 'ACTIVE' : 'INVITE REQUIRED'}</div>
                 </div>
             `;
-            guildList.appendChild(guildItem);
+
+            card.onclick = () => {
+                if (g.bot_present) this.openConfig(g);
+                else this.invite(g.id);
+            };
+            grid.appendChild(card);
         });
-    }
-}
+    },
 
-async function loadStats() {
-    try {
-        const response = await fetch('/api/stats');
-        const stats = await response.json();
-
-        // Update Stats Cards
-        const totalUsersEl = document.getElementById('totalUsersVal');
-        if (totalUsersEl) totalUsersEl.textContent = stats.total_users.toLocaleString();
-
-        const totalCmdsEl = document.getElementById('totalCmdsVal');
-        if (totalCmdsEl) totalCmdsEl.textContent = stats.total_commands >= 1000
-            ? (stats.total_commands / 1000).toFixed(1) + 'k'
-            : stats.total_commands;
-
-        const aiReflectionsEl = document.getElementById('aiReflectionsVal');
-        if (aiReflectionsEl) aiReflectionsEl.textContent = stats.ai_reflections >= 1000
-            ? (stats.ai_reflections / 1000).toFixed(1) + 'k'
-            : stats.ai_reflections;
-
-        const statusLabel = document.querySelector('.status-indicator span');
-        if (statusLabel) statusLabel.textContent = `SYSTEM ${stats.system_status}`;
-
-        const uptimeVal = document.getElementById('uptimeVal');
-        if (uptimeVal) {
-            const h = Math.floor(stats.uptime_seconds / 3600);
-            const m = Math.floor((stats.uptime_seconds % 3600) / 60);
-            uptimeVal.textContent = `${h}h ${m}m`;
-        }
-
-        const ramVal = document.getElementById('ramVal');
-        if (ramVal) ramVal.textContent = `${Math.round(stats.ram_usage)}%`;
-
-        // Update Vibe Chart
-        const vibeChart = document.getElementById('vibeChart');
-        if (vibeChart && stats.vibe_distribution) {
-            const totalVibes = Object.values(stats.vibe_distribution).reduce((a, b) => a + b, 0);
-            if (totalVibes > 0) {
-                vibeChart.innerHTML = '';
-                const colors = {
-                    'creative': 'var(--p)',
-                    'technical': 'var(--s)',
-                    'casual': '#fff',
-                    'respectful': 'var(--t)',
-                    'rude': '#ff5555'
-                };
-
-                Object.entries(stats.vibe_distribution).forEach(([vibe, count]) => {
-                    const percent = Math.round((count / totalVibes) * 100);
-                    const bar = document.createElement('div');
-                    bar.className = 'vibe-bar';
-                    bar.style = `--val: ${percent}%; --color: ${colors[vibe.toLowerCase()] || '#888'};`;
-                    bar.innerHTML = `
-                        <span class="v-label">${vibe.charAt(0).toUpperCase() + vibe.slice(1)}</span>
-                        <div class="v-progress"></div>
-                        <span class="v-percent">${percent}%</span>
-                    `;
-                    vibeChart.appendChild(bar);
-                });
-            }
-        }
-
-        // Update Activity Feed
-        const activityList = document.getElementById('activityList');
-        if (activityList && stats.activities && stats.activities.length > 0) {
-            activityList.innerHTML = '';
-            stats.activities.forEach(act => {
-                const item = document.createElement('div');
-                item.className = 'log-item';
-                item.innerHTML = `
-                    <div class="log-time">${act.time}</div>
-                    <div class="log-content">
-                        <strong>${act.type}:</strong> ${act.content}
-                    </div>
-                `;
-                activityList.appendChild(item);
+    async fetchSystemStats() {
+        try {
+            const res = await fetch(`/api/dashboard/stats`, {
+                headers: { 'X-Session-Token': this.token }
             });
+            const data = await res.json();
+            document.getElementById('statUsers').textContent = (data.users || 0).toLocaleString();
+            document.getElementById('statMsgs').textContent = ((data.messages || 0) / 1000).toFixed(1) + 'K';
+
+            // Render Leaderboard if in data
+            if (data.leaderboard) {
+                const list = document.getElementById('leaderboardList');
+                list.innerHTML = data.leaderboard.map((u, i) => `
+                    <div class="rank-row">
+                        <div class="u-info">
+                            <b>#${i + 1}</b>
+                            <span>ID: ${u.id.toString().slice(-4)}</span>
+                        </div>
+                        <div class="u-info">
+                            <b>LVL ${u.level}</b>
+                            <span>${u.xp} XP</span>
+                        </div>
+                    </div>
+                `).join('');
+            }
+        } catch (e) { }
+    },
+
+    async openConfig(guild) {
+        this.activeGuild = guild;
+
+        // Show the customization tab
+        this.switchTab('customization');
+        document.getElementById('custTitle').textContent = guild.name.toUpperCase();
+        document.getElementById('custFormContainer').style.display = 'block';
+        document.getElementById('aiArchitectSection').style.display = 'block';
+        document.getElementById('noGuildSelected').style.display = 'none';
+
+        try {
+            const res = await fetch(`/api/guilds/${guild.id}/settings`, {
+                headers: { 'X-Session-Token': this.token }
+            });
+            if (res.ok) {
+                const s = await res.json();
+
+                // CORE
+                document.getElementById('mCfgPrefix').value = s.prefix || '!';
+                document.getElementById('mCfgVibe').value = s.vibe || 'chill';
+
+                // CHANNELS
+                document.getElementById('mCfgWelcomeChan').value = s.welcome_channel || '';
+                document.getElementById('mCfgLogChan').value = s.log_channel || '';
+                document.getElementById('mCfgRulesChan').value = s.rules_channel || '';
+                document.getElementById('mCfgRoleReqChan').value = s.role_request_channel || '';
+                document.getElementById('mCfgVerifyChan').value = s.verification_channel || '';
+                document.getElementById('mCfgLevelChan').value = s.leveling_channel || '';
+                document.getElementById('mCfgGeneralChan').value = s.general_channel || '';
+
+                // ROLES
+                document.getElementById('mCfgVerifiedRole').value = s.verified_role || '';
+                document.getElementById('mCfgUnverifiedRole').value = s.unverified_role || '';
+                document.getElementById('mCfgMutedRole').value = s.muted_role || '';
+
+                // SOFTWARE
+                document.getElementById('mCfgAeRole').value = s.ae_role || '';
+                document.getElementById('mCfgAmRole').value = s.am_role || '';
+                document.getElementById('mCfgCapcutRole').value = s.capcut_role || '';
+                document.getElementById('mCfgPrRole').value = s.pr_role || '';
+                document.getElementById('mCfgPsRole').value = s.ps_role || '';
+
+                // ADVANCED
+                document.getElementById('mCfgAesthetic').value = s.aesthetic_overlay || '';
+                document.getElementById('mCfgPrompt').value = s.custom_system_prompt || '';
+            }
+        } catch (e) { }
+    },
+
+    switchTab(tabId) {
+        document.querySelectorAll('.nav-item').forEach(btn => {
+            if (btn.getAttribute('data-tab') === tabId) btn.classList.add('active');
+            else btn.classList.remove('active');
+        });
+        document.querySelectorAll('.tab').forEach(el => {
+            if (el.id === `tab-${tabId}`) el.classList.add('active');
+            else el.classList.remove('active');
+        });
+    },
+
+    async invite(id) {
+        try {
+            const res = await fetch(`/api/invite-url?guild_id=${id}`);
+            const data = await res.json();
+            window.open(data.url, '_blank');
+        } catch (e) { }
+    },
+
+    bindNav() {
+        document.querySelectorAll('.nav-item').forEach(btn => {
+            btn.onclick = () => {
+                const tab = btn.getAttribute('data-tab');
+                document.querySelectorAll('.nav-item, .tab').forEach(el => el.classList.remove('active'));
+                btn.classList.add('active');
+                document.getElementById(`tab-${tab}`).classList.add('active');
+            };
+        });
+    },
+
+    startClock() {
+        setInterval(() => {
+            document.getElementById('osClock').textContent = new Date().toLocaleTimeString();
+        }, 1000);
+    }
+};
+
+
+
+document.addEventListener('DOMContentLoaded', () => Dashboard.init());
+
+function closeModal() { document.getElementById('configModal').classList.remove('active'); }
+
+async function triggerAction(action) {
+    if (!Dashboard.activeGuild) return;
+
+    // Find the button that was clicked to show status
+    const btn = event.target;
+    const originalText = btn.textContent;
+    btn.textContent = "SENDING...";
+    btn.disabled = true;
+
+    try {
+        const res = await fetch(`/api/guilds/${Dashboard.activeGuild.id}/trigger?token=${Dashboard.token}`, {
+            method: 'POST',
+            body: JSON.stringify({ action }),
+            headers: { 'Content-Type': 'application/json' }
+        });
+        const data = await res.json();
+        if (data.status === 'success') {
+            btn.textContent = "✓ SENT";
+            btn.style.color = "#00ffaa";
+        } else {
+            btn.textContent = "❌ ERROR";
+            btn.style.color = "#ff4d4d";
+            console.error(data.error);
         }
-    } catch (error) {
-        console.warn('Failed to load stats', error);
+    } catch (e) {
+        btn.textContent = "❌ FAIL";
+    }
+
+    setTimeout(() => {
+        btn.textContent = originalText;
+        btn.style.color = "";
+        btn.disabled = false;
+    }, 2000);
+}
+
+async function saveActiveSettings() {
+    if (!Dashboard.activeGuild) return;
+    const btn = document.querySelector('.btn-sync-top');
+    const oldText = btn.textContent;
+    btn.textContent = "SYNCING SIGNALS...";
+
+    const data = {
+        prefix: document.getElementById('mCfgPrefix').value,
+        vibe: document.getElementById('mCfgVibe').value,
+        welcome_channel: document.getElementById('mCfgWelcomeChan').value,
+        log_channel: document.getElementById('mCfgLogChan').value,
+        rules_channel: document.getElementById('mCfgRulesChan').value,
+        role_request_channel: document.getElementById('mCfgRoleReqChan').value,
+        verification_channel: document.getElementById('mCfgVerifyChan').value,
+        leveling_channel: document.getElementById('mCfgLevelChan').value,
+        general_channel: document.getElementById('mCfgGeneralChan').value,
+        verified_role: document.getElementById('mCfgVerifiedRole').value,
+        unverified_role: document.getElementById('mCfgUnverifiedRole').value,
+        muted_role: document.getElementById('mCfgMutedRole').value,
+        ae_role: document.getElementById('mCfgAeRole').value,
+        am_role: document.getElementById('mCfgAmRole').value,
+        capcut_role: document.getElementById('mCfgCapcutRole').value,
+        pr_role: document.getElementById('mCfgPrRole').value,
+        ps_role: document.getElementById('mCfgPsRole').value,
+        aesthetic_overlay: document.getElementById('mCfgAesthetic').value,
+        custom_system_prompt: document.getElementById('mCfgPrompt').value
+    };
+
+    try {
+        const res = await fetch(`/api/guilds/${Dashboard.activeGuild.id}/settings`, {
+            method: 'POST',
+            body: JSON.stringify(data),
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Session-Token': Dashboard.token
+            }
+        });
+        btn.textContent = "✓ SIGNALS SYNCED";
+        setTimeout(() => btn.textContent = oldText, 2000);
+    } catch (e) {
+        btn.textContent = "❌ SYNC FAILED";
+        setTimeout(() => btn.textContent = oldText, 2000);
     }
 }
 
-// Back to Top Functionality
-function scrollToTop() {
-    window.scrollTo({
-        top: 0,
-        behavior: 'smooth'
-    });
+async function triggerAiBuild() {
+    if (!Dashboard.activeGuild) return;
+    const promptField = document.getElementById('aiArchPrompt');
+    const prompt = promptField.value.trim();
+    if (!prompt) return alert("Please describe your server architecture first.");
+
+    const btn = document.querySelector('.btn-arch');
+    const oldText = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = "BRAINSTORMING STRUCTURE...";
+
+    try {
+        const res = await fetch(`/api/guilds/${Dashboard.activeGuild.id}/ai-plan`, {
+            method: 'POST',
+            body: JSON.stringify({ prompt }),
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Session-Token': Dashboard.token
+            }
+        });
+
+        if (res.status === 401) throw new Error("Unauthorized: Please log in again.");
+        if (!res.ok) throw new Error(`HTTP Error: ${res.status}`);
+
+        const data = await res.json();
+
+        if (data.status === "success") {
+            window.activeAiPlan = data.plan;
+            const list = document.getElementById('aiPlanList');
+            document.getElementById('aiArchPlanReview').style.display = 'block';
+
+            list.innerHTML = data.plan.map(item => `
+                <div class="plan-item">
+                    <b>${item.action.replace('create_', '')}</b>
+                    <span>${item.name} ${item.type ? `(${item.type})` : ''}</span>
+                </div>
+            `).join('');
+
+            btn.disabled = false;
+            btn.textContent = "PLAN GENERATED";
+        } else {
+            throw new Error(data.error || "Brainstorm failed");
+        }
+    } catch (e) {
+        btn.textContent = "AI CALCULATION ERROR";
+        setTimeout(() => {
+            btn.disabled = false;
+            btn.textContent = oldText;
+        }, 3000);
+        console.error("Architect Error:", e);
+        alert(e.message);
+    }
 }
 
-window.addEventListener('scroll', () => {
-    const btt = document.getElementById('backToTop');
-    if (window.scrollY > 300) {
-        btt.classList.add('active');
-    } else {
-        btt.classList.remove('active');
+async function executeAiBuild() {
+    if (!window.activeAiPlan) return;
+    const btn = document.querySelector('#aiArchPlanReview .btn-arch');
+    const oldText = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = "MANIFESTING ARCHITECTURE...";
+
+    try {
+        const res = await fetch(`/api/guilds/${Dashboard.activeGuild.id}/ai-execute`, {
+            method: 'POST',
+            body: JSON.stringify({ plan: window.activeAiPlan }),
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Session-Token': Dashboard.token
+            }
+        });
+        const data = await res.json();
+
+        if (data.status === "success") {
+            btn.textContent = "ARCHITECTED SUCCESSFULLY";
+            document.getElementById('aiArchPrompt').value = "";
+            setTimeout(() => {
+                document.getElementById('aiArchPlanReview').style.display = 'none';
+                btn.disabled = false;
+                btn.textContent = oldText;
+            }, 4000);
+        } else {
+            throw new Error(data.error || "Manifestation failed");
+        }
+    } catch (e) {
+        btn.textContent = "EXECUTION ERROR";
+        setTimeout(() => {
+            btn.disabled = false;
+            btn.textContent = oldText;
+        }, 3000);
+        alert(e.message);
     }
-});
+}

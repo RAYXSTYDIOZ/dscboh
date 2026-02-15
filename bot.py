@@ -43,13 +43,38 @@ intents = discord.Intents.default()
 intents.message_content = True  # Required to read message content
 intents.members = True          # Required for banning/kicking/on_member_join
 
+# --- SYSTEM HELPERS ---
+def get_env_int(key_parts, default):
+    key = "".join(key_parts) if isinstance(key_parts, list) else key_parts
+    try:
+        val = os.environ.get(key)
+        if val and val.strip().isdigit(): return int(val)
+    except: pass
+    return default
+
+def get_env_str(key_parts, default=None):
+    key = "".join(key_parts) if isinstance(key_parts, list) else key_parts
+    return os.environ.get(key, default)
+
+def get_guild_conf(guild_id, key, default):
+    """Fetch settings from the dashboard database with a fallback to env/default."""
+    if not guild_id: return default
+    settings = db_manager.get_guild_setting(guild_id, "all_settings", {})
+    return settings.get(key, default)
+
 # Create bot instance with command prefix and intents (case-insensitive)
-bot = commands.Bot(command_prefix='!', intents=intents, case_insensitive=True)
+async def get_prefix(bot, message):
+    if not message.guild:
+        return '!'
+    # Fetch guild-specific prefix from database, fallback to '!'
+    return get_guild_conf(message.guild.id, "prefix", "!")
+
+bot = commands.Bot(command_prefix=get_prefix, intents=intents, case_insensitive=True)
 
 # Remove default help command to allow for custom implementation
 bot.remove_command('help')
 
-# Configure Gemini AI Key - Scans for any casing (GEMINI_KEY, Gemini_key, etc.)
+# --- CONFIGURATION HELPERS ---
 def find_keys():
     found = []
     for k, v in os.environ.items():
@@ -64,136 +89,15 @@ current_key_index = 0
 
 if GEMINI_KEYS:
     logger.info(f"✅ SYSTEM: Detected {len(GEMINI_KEYS)} Gemini API Key(s).")
-    # Log the first 4 chars of the first key to help the user confirm it's loaded
-    logger.info(f"✅ SYSTEM: Active Key Starts With: {GEMINI_KEYS[0][:4]}...")
 else:
-    logger.error("❌ CRITICAL: NO API KEY DETECTED. Check Railway Variables for 'Gemini_key'.")
+    logger.error("❌ CRITICAL: NO API KEY DETECTED.")
 
-# --- GLOBAL CONFIGURATION ---
-# --- GLOBAL CONFIGURATION ---
+# --- GLOBAL SETTINGS ---
 PRIMARY_MODEL = "gemini-3-flash-preview"
 FALLBACK_MODEL = "gemini-1.5-flash"
-SECRET_LOG_CHANNEL_ID = 1456312201974644776
+SECRET_LOG_CHANNEL_ID = get_env_int("SECRET_LOG_CHANNEL_ID", 1456312201974644776)
 
-if not GEMINI_KEYS:
-    logger.error("❌ NO GEMINI API KEYS FOUND IN ENVIRONMENT")
-    gemini_client = None
-else:
-    gemini_client = genai.Client(api_key=GEMINI_KEYS[current_key_index], http_options={'api_version': 'v1beta'})
-
-def rotate_gemini_key():
-    """Rotate to the next available API key."""
-    global current_key_index, gemini_client
-    if len(GEMINI_KEYS) <= 1:
-        return False
-    
-    current_key_index = (current_key_index + 1) % len(GEMINI_KEYS)
-    gemini_client = genai.Client(api_key=GEMINI_KEYS[current_key_index], http_options={'api_version': 'v1beta'})
-    logger.info(f"🔄 Switched to API Key Position: {current_key_index + 1}")
-    return True
-
-# Fallback configuration
-FALLBACK_MODEL = "gemini-1.5-flash"
-
-def get_env_int(key_parts, default):
-    """Safely get an integer from environment variables using obfuscated parts."""
-    key = "".join(key_parts) if isinstance(key_parts, list) else key_parts
-    try:
-        val = os.environ.get(key)
-        if val and val.strip().isdigit():
-            return int(val)
-    except:
-        pass
-    return default
-
-def get_env_str(key_parts, default=None):
-    """Safely get a string from environment variables using obfuscated parts."""
-    key = "".join(key_parts) if isinstance(key_parts, list) else key_parts
-    return os.environ.get(key, default)
-
-async def safe_generate_content(model, contents, config=None):
-    """Wrapper to handle API key rotation and standard model calls."""
-    if not GEMINI_KEYS:
-        logger.error("❌ No API keys available in GEMINI_KEYS pool.")
-        return None
-        
-    last_err = None
-    # Try multiple keys if rate limited
-    for _ in range(len(GEMINI_KEYS)):
-        try:
-            if not gemini_client:
-                if not rotate_gemini_key(): break
-            
-            # Default config if none provided (fast generation)
-            if config is None:
-                config = types.GenerateContentConfig(
-                    temperature=1.0
-                )
-            
-            # Use asyncio.to_thread to prevent blocking the event loop
-            return await asyncio.to_thread(
-                gemini_client.models.generate_content,
-                model=model,
-                contents=contents,
-                config=config
-            )
-        except Exception as e:
-            last_err = e
-            err_str = str(e).lower()
-            if ("429" in err_str or "exhausted" in err_str or "limit" in err_str or "401" in err_str):
-                logger.warning(f"Rate limit or auth error with key {current_key_index + 1}. Rotating...")
-                if rotate_gemini_key(): continue
-            break # Non-recoverable error
-            
-    if last_err: raise last_err
-    return None
-
-# Persistent conversation history and user memory is now handled by db_manager in database.py
-# conversation_history = {} # DEPRECATED
-
-# Track user states for multi-step conversations
-user_states = {}
-
-# System Messages
-API_ERROR_MSG = "❌ my bad, i'm having some trouble connecting right now. try again in a bit."
-BOT_ERROR_MSG = API_ERROR_MSG 
-
-# Track user warnings for moderation (user_id: {"count": n, "last_warn": timestamp, "reason": str})
-# Track user warnings for moderation (user_id: {"count": n, "last_warn": timestamp, "reason": str})
-user_warnings = db_manager.get_warnings()
-
-def save_warnings(warnings):
-    for uid, data in warnings.items():
-        db_manager.save_warning(uid, data['count'], data['history'])
-
-# Track YouTube verification cooldowns (user_id: timestamp)
-yt_cooldowns = db_manager.get_yt_cooldowns()
-
-def save_yt_cooldowns(cooldowns):
-    for uid, expiry in cooldowns.items():
-        db_manager.save_yt_cooldown(uid, expiry)
-
-# Server security tracking
-guild_join_history = {}  # guild_id: [{"user_id": id, "timestamp": time}, ...]
-guild_security_settings = {}  # guild_id: {"min_account_age_days": 7, "raid_alert_threshold": 5}
-
-# Channel/Role Configuration
-# Role ID Lookups
-YOUTUBER_ROLE_ID = get_env_int("YOUTUBER_ROLE_ID", 0)
-LEGENDARY_ROLE_ID = get_env_int("LEGENDARY_ROLE_ID", 0)
-
-# Editing Role Configuration
-# Editing Roles
-AE_ROLE_ID = get_env_int("AE_ROLE_ID", 0)
-AM_ROLE_ID = get_env_int("AM_ROLE_ID", 0)
-CAPCUT_ROLE_ID = get_env_int("CAPCUT_ROLE_ID", 0)
-PR_ROLE_ID = get_env_int("PR_ROLE_ID", 0)
-PS_ROLE_ID = get_env_int("PS_ROLE_ID", 0)
-OTHER_EDIT_ROLE_ID = get_env_int("OTHER_EDIT_ROLE_ID", 0)
-GIVEAWAY_ROLE_ID = get_env_int("GIVEAWAY_ROLE_ID", 0)
-
-# Emoji/Icon Configuration
-# Emojis
+# Emoji IDs (Used for UI buttons)
 AE_EMOJI_ID = get_env_int("AE_EMOJI_ID", 0)
 AM_EMOJI_ID = get_env_int("AM_EMOJI_ID", 0)
 CAPCUT_EMOJI_ID = get_env_int("CAPCUT_EMOJI_ID", 0)
@@ -201,44 +105,75 @@ OTHER_EDIT_EMOJI_ID = get_env_int("OTHER_EDIT_EMOJI_ID", 0)
 YOUTUBER_EMOJI_ID = get_env_int("YOUTUBER_EMOJI_ID", 0)
 LEGENDARY_EMOJI_ID = get_env_int("LEGENDARY_EMOJI_ID", 0)
 
-# Activity logging channel
-# Logging and Appeals
-LOG_CHANNEL_ID = get_env_str("LOG_CHANNEL_ID")
-log_channel = None  
-APPEAL_CHANNEL_ID = get_env_int("APPEAL_CHANNEL_ID", 0)
+if not GEMINI_KEYS:
+    gemini_client = None
+else:
+    gemini_client = genai.Client(api_key=GEMINI_KEYS[current_key_index], http_options={'api_version': 'v1beta'})
 
-# --- VERIFICATION SYSTEM CONFIG ---
-# Verification
-VERIFICATION_CHANNEL_ID = get_env_int("VERIFICATION_CHANNEL_ID", 0)
-VERIFIED_ROLE_ID = get_env_int("VERIFIED_ROLE_ID", 0)
-MUTED_ROLE_ID = get_env_int("MUTED_ROLE_ID", 0)
-UNVERIFIED_ROLE_ID = get_env_int("UNVERIFIED_ROLE_ID", 0)
-VERIFICATION_AGE_THRESHOLD_DAYS = 30
+def rotate_gemini_key():
+    """Rotate to the next available API key."""
+    global current_key_index, gemini_client
+    if len(GEMINI_KEYS) <= 1: return False
+    current_key_index = (current_key_index + 1) % len(GEMINI_KEYS)
+    gemini_client = genai.Client(api_key=GEMINI_KEYS[current_key_index], http_options={'api_version': 'v1beta'})
+    return True
 
-# Active captcha codes storage (user_id: code)
-active_captchas = db_manager.get_active_captchas()
 
-def save_active_captchas(captchas):
-    # This is a bit inefficient for captchas, but following the existing pattern
-    for uid, code in captchas.items():
-        db_manager.save_captcha(uid, code)
+# State tracking
+user_states = {}
+user_warnings = db_manager.get_warnings()
+yt_cooldowns = db_manager.get_yt_cooldowns()
 
-# --- LEVELING SYSTEM STORAGE ---
-user_levels = db_manager.get_levels()
-LEVELING_CHANNEL_ID = 1468888240726741119
+# --- DYNAMIC CONFIGURATION ACCESS ---
+# These functions now take a guild_id to support multi-tenancy
+def get_welcome_chan(guild_id=0): 
+    return int(get_guild_conf(guild_id, "welcome_channel", get_env_int("WELCOME_CHANNEL_ID", 0)))
 
-# Lazily loaded channel settings
-def get_welcome_chan(): 
-    return get_env_int("WELCOME_CHANNEL_ID", 0)
+def get_rules_chan(guild_id=0): 
+    return int(get_guild_conf(guild_id, "rules_channel", get_env_int("RULES_CHANNEL_ID", 0)))
 
-def get_rules_chan(): 
-    return get_env_int("RULES_CHANNEL_ID", 0)
+def get_role_request_chan(guild_id=0):
+    return int(get_guild_conf(guild_id, "role_request_channel", get_env_int("ROLE_REQUEST_CHANNEL_ID", 0)))
 
-def get_role_request_chan():
-    return get_env_int("ROLE_REQUEST_CHANNEL_ID", 1249245390755205161)
+def get_general_chan(guild_id=0): 
+    return int(get_guild_conf(guild_id, "general_channel", get_env_int("GENERAL_CHAT_CHANNEL_ID", 0)))
 
-def get_general_chan(): 
-    return get_env_int("GENERAL_CHAT_CHANNEL_ID", 1311717154793459764)
+def get_log_chan(guild_id=0):
+    return int(get_guild_conf(guild_id, "log_channel", get_env_int("LOG_CHANNEL_ID", 0)))
+
+def get_verification_chan(guild_id=0):
+    return int(get_guild_conf(guild_id, "verification_channel", get_env_int("VERIFICATION_CHANNEL_ID", 0)))
+
+# Role Mappings
+def get_verified_role(guild_id=0):
+    return int(get_guild_conf(guild_id, "verified_role", get_env_int("VERIFIED_ROLE_ID", 0)))
+
+def get_leveling_chan(guild_id=0):
+    return int(get_guild_conf(guild_id, "leveling_channel", get_env_int("LEVELING_CHANNEL_ID", 0)))
+
+def get_unverified_role(guild_id=0):
+    return int(get_guild_conf(guild_id, "unverified_role", get_env_int("UNVERIFIED_ROLE_ID", 0)))
+
+def get_muted_role(guild_id=0):
+    return int(get_guild_conf(guild_id, "muted_role", get_env_int("MUTED_ROLE_ID", 0)))
+
+# Editing Roles (Dashboard integration ready)
+def get_ae_role(guild_id=0): return int(get_guild_conf(guild_id, "ae_role", get_env_int("AE_ROLE_ID", 0)))
+def get_am_role(guild_id=0): return int(get_guild_conf(guild_id, "am_role", get_env_int("AM_ROLE_ID", 0)))
+def get_capcut_role(guild_id=0): return int(get_guild_conf(guild_id, "capcut_role", get_env_int("CAPCUT_ROLE_ID", 0)))
+def get_pr_role(guild_id=0): return int(get_guild_conf(guild_id, "pr_role", get_env_int("PR_ROLE_ID", 0)))
+def get_ps_role(guild_id=0): return int(get_guild_conf(guild_id, "ps_role", get_env_int("PS_ROLE_ID", 0)))
+def get_youtuber_role(guild_id=0): return int(get_guild_conf(guild_id, "youtuber_role", get_env_int("YOUTUBER_ROLE_ID", 0)))
+
+# Persistence wrappers
+def save_warnings(warnings):
+    for uid, data in warnings.items():
+        db_manager.save_warning(uid, data['count'], data['history'])
+
+def save_yt_cooldowns(cooldowns):
+    for uid, expiry in cooldowns.items():
+        db_manager.save_yt_cooldown(uid, expiry)
+
 
 def save_levels(levels_data):
     for uid, data in levels_data.items():
@@ -354,132 +289,87 @@ def get_guild_role(guild, role_id, role_name=None):
 # Background task to check for users who have reached the maturity threshold
 @tasks.loop(hours=1)
 async def check_account_maturity():
-    """Check all servers for muted users whose account age has now reached 31 days."""
+    """Check all servers for muted users whose account age has now reached maturity threshold (30 days)."""
     for guild in bot.guilds:
-        muted_role = guild.get_role(MUTED_ROLE_ID)
+        m_id = get_muted_role(guild.id)
+        muted_role = guild.get_role(m_id)
         if not muted_role:
             continue
             
         for member in muted_role.members:
             acc_age_days = (datetime.now(timezone.utc) - member.created_at).days
-            if acc_age_days >= VERIFICATION_AGE_THRESHOLD_DAYS:
+            if acc_age_days >= 30: # Standard 30 day threshold
                 try:
-                    await member.remove_roles(muted_role, reason="Account reached 31-day maturity threshold")
+                    await member.remove_roles(muted_role, reason="Account reached maturity threshold")
                     logger.info(f"Unmuted {member.name} in {guild.name} (Acc age: {acc_age_days}d)")
                     try:
-                        await member.send(f"🎉 Your account is now **{acc_age_days}** days old! You have been unmuted in **{guild.name}** and now have full speaking access.")
+                        await member.send(f"🎉 Your account is now **{acc_age_days}** days old! You have been unmuted in **{guild.name}**.")
                     except: pass
                 except Exception as e:
                     logger.error(f"Failed to unmute matured account {member.name}: {e}")
 
 @tasks.loop(hours=6)
 async def revive_chat():
-    """Automatically generate and send an impressive, human-like chat revival message every 6 hours."""
-    channel_id = 1311717154793459764
-    channel = bot.get_channel(channel_id)
-    if not channel:
-        logger.warning(f"Chat revival channel {channel_id} not found.")
-        return
+    """Loop through all guilds and send a revival message if quiet."""
+    for guild in bot.guilds:
+        c_id = get_general_chan(guild.id)
+        channel = guild.get_channel(c_id)
+        if not channel: continue
 
-    try:
-        # Prompt Gemini for a highly specialized "humanish" message
-        prompt = (
-            "You are a member of a cool creative discord community. "
-            "It's been a bit quiet, and you want to drop a message that feels 100% human, chill, and authentic. "
-            "CRITICAL RULES: \n"
-            "1. Do NOT sound like a bot, AI, or corporate assistant. \n"
-            "2. Do NOT mention 'BMR', 'creator', or 'developer'. \n"
-            "3. Use modern slang naturally (e.g., 'vibe', 'lowkey', 'cookin', 'fire', 'elite'). \n"
-            "4. Talk like a real person. Maybe ask about a recent project, a cool tool, or just share a random vibe. \n"
-            "5. Keep it short—one sentence max. \n"
-            "6. Avoid punctuation if it makes it look 'too perfect'. Lowercase is fine. \n"
-            "Example vibe: 'lowkey been obsessed with some new aesthetic lately, anyone else cookin?' or 'chat is quiet, what are we even working on today?'"
-        )
-        
-        # Use a generic user ID (0) for the automated task, but tell it it's "one of the boys"
-        response = await get_gemini_response(prompt, user_id=0, username="Vibes", model=FALLBACK_MODEL)
-        
-        if response and "BMR" not in response:
-            # Clean response of backticks or extra formatting if Gemini adds them
-            clean_msg = response.strip().replace('"', '').replace('`', '')
-            await channel.send(clean_msg)
-            logger.info("Sent automated chat revival message.")
-        else:
-            # Fallback if AI output is invalid or contains forbidden words
-            fallbacks = [
-                "The vibe here is elite, but where's the conversation at? What's everyone working on?",
-                "Yo! The energy is high, but the chat is quiet. Any legends got some fire projects to share?",
-                "Looking for some creative inspiration today. What's the coolest thing you've seen lately?",
-                "The grind never stops, but don't forget to take a breather and drop a message. How's the day going?",
-                "Always hyped to see what this community is cooking up. Anyone got some fresh edits or ideas?"
-            ]
-            await channel.send(random.choice(fallbacks))
-            logger.info("Sent fallback chat revival message.")
+        try:
+            # Prompt Gemini for a highly specialized "humanish" message
+            prompt = "It's quiet in the chat. Send a one-sentence, chill, human-like message to start a conversation. No robot talk."
+            response = await brain.get_gemini_response(prompt, user_id=0, username="System", model=FALLBACK_MODEL, guild_id=guild.id)
             
-    except Exception as e:
-        logger.error(f"Error in revive_chat task: {e}")
+            if response:
+                clean_msg = response.strip().replace('"', '').replace('`', '')
+                await channel.send(clean_msg)
+                logger.info(f"Sent chat revival in {guild.name}")
+        except Exception as e:
+            logger.error(f"Error in revive_chat for {guild.name}: {e}")
 
 @tasks.loop(hours=24)
 async def daily_insight():
-    """Post a high-tier editing tip or secret shortcut every 24 hours."""
-    channel_id = 1311717154793459764 # Main community channel
-    channel = bot.get_channel(channel_id)
-    if not channel:
-        return
+    """Send a creative tip to all guilds every 24 hours."""
+    for guild in bot.guilds:
+        c_id = get_general_chan(guild.id)
+        channel = guild.get_channel(c_id)
+        if not channel: continue
 
-    try:
-        prompt = (
-            "You are Prime, a world-class creative. Today is time for a 'Daily Insight'. "
-            "Provide one extremely high-level creative tip, hidden shortcut, or industry secret (editing, design, AI, coding, or general workflow). "
-            "It must be something even 'pro' creators might not know. "
-            "Tone: Chill, expert, direct. No 'top 10' list stuff. Just one deep-cut tip. "
-            "Format it with a clean title and clear steps. No robot talk."
-        )
-        response = await get_gemini_response(prompt, user_id=0, username="Elite", model=FALLBACK_MODEL)
-        if response:
-            header = "💡 **Today's Elite Insight**"
-            await channel.send(f"{header}\n\n{response}")
-            logger.info("Sent daily elite insight.")
-    except Exception as e:
-        logger.error(f"Error in daily_insight task: {e}")
+        try:
+            prompt = "Provide one high-level creative tip or industry secret. Chill, direct tone. Short."
+            response = await brain.get_gemini_response(prompt, user_id=0, username="System", model=FALLBACK_MODEL, guild_id=guild.id)
+            if response:
+                await channel.send(f"💡 **Today's Insight**\n\n{response}")
+        except Exception as e:
+            logger.error(f"Error in daily_insight for {guild.name}: {e}")
 
 # Track who added the bot to each server (guild_id -> user_id)
 guild_inviters = db_manager.get_guild_inviters()
 
 @tasks.loop(hours=4)
 async def creative_pulse():
-    """Analyze the overall server vibe and give a chill shoutout to what's happening."""
-    channel_id = 1311717154793459764 # Main community channel
-    channel = bot.get_channel(channel_id)
-    if not channel:
-        return
+    """Analyze server activity and give a shoutout."""
+    for guild in bot.guilds:
+        c_id = get_general_chan(guild.id)
+        channel = guild.get_channel(c_id)
+        if not channel: continue
 
-    try:
-        # Collect recent context from various channels if possible
-        context_sources = [channel] # Can add more
-        all_content = []
-        for c in context_sources:
-            async for msg in c.history(limit=50):
+        try:
+            all_content = []
+            async for msg in channel.history(limit=50):
                 if not msg.author.bot:
                     all_content.append(f"{msg.author.name}: {msg.content}")
-        
-        if not all_content:
-            return
+            
+            if not all_content: continue
 
-        context_str = "\n".join(all_content[:30]) # Just a sample
-        prompt = (
-            f"Here is a snippet of recent chat in our creative community:\n{context_str}\n\n"
-            "Analyze the 'creative pulse'. What are they hyped about? What's the vibe? "
-            "Give a one-sentence shoutout or observation. "
-            "Tone: Chill, direct, high-tier partner. NO robot talk. Use lowercase naturally. "
-            "Example: 'vibe is high today, glad to see everyone finally figuring out the new tools.' or 'chat is cookin, keep that energy up for the new week.'"
-        )
-        response = await get_gemini_response(prompt, user_id=0, username="System", model=FALLBACK_MODEL)
-        if response:
-            await channel.send(f"🌊 {response}")
-            logger.info("Sent creative pulse update.")
-    except Exception as e:
-        logger.error(f"Error in creative_pulse task: {e}")
+            context_str = "\n".join(all_content[:20])
+            prompt = f"Analyze the vibe of this chat and give a one-sentence chill shoutout:\n{context_str}"
+            response = await brain.get_gemini_response(prompt, user_id=0, username="System", model=FALLBACK_MODEL, guild_id=guild.id)
+            if response:
+                await channel.send(f"🌊 {response}")
+        except Exception as e:
+            logger.error(f"Error in creative_pulse for {guild.name}: {e}")
 
 def save_guild_inviters(inviters):
     for gid, uid in inviters.items():
@@ -488,12 +378,21 @@ def save_guild_inviters(inviters):
 # Media spam tracking (hash: {"count": n, "last_seen": time, "users": set()})
 image_hash_tracker = {}
 
-async def log_activity(title, description, color=0x5865F2, fields=None):
-    """Send activity log to the designated Discord channel."""
-    global log_channel
-    if not log_channel:
-        return
+async def log_activity(title, description, color=0x5865F2, fields=None, guild=None):
+    """Send activity log to the designated Discord channel (per-guild or global)."""
+    target_id = None
+    if guild:
+        target_id = get_log_chan(guild.id)
+    
+    if not target_id:
+        target_id = get_env_int("LOG_CHANNEL_ID", 0)
+
+    if not target_id: return
+    
     try:
+        channel = bot.get_channel(target_id)
+        if not channel: return
+        
         embed = discord.Embed(
             title=title,
             description=description,
@@ -503,27 +402,32 @@ async def log_activity(title, description, color=0x5865F2, fields=None):
         if fields:
             for name, value in fields.items():
                 embed.add_field(name=name, value=str(value), inline=True)
-        await log_channel.send(embed=embed)
+        await channel.send(embed=embed)
     except Exception as e:
         logger.error(f"Failed to send activity log: {e}")
 
-def is_server_admin(user, guild):
-    """Check if user is the server inviter, guild owner, or has admin permissions."""
-    if not guild:
-        return False
+async def is_server_admin(user, guild):
+    """Check if user is the bot owner, guild owner, or has administrator permissions."""
+    if not guild: return False
+    
+    # 1. Global Bot Owner
+    try:
+        app = await bot.application_info()
+        if user.id == app.owner.id: return True
+    except: pass
+    
+    # 2. Guild Owner
+    if guild.owner and user.id == guild.owner.id: return True
+
+    # 3. Dedicated Guild Admin (Who invited the bot)
     guild_id_str = str(guild.id)
-    # Check if user is BMR (always has access)
-    if 'bmr' in user.name.lower():
-        return True
-    # Check if user is the guild owner
-    if guild.owner and user.id == guild.owner.id:
-        return True
-    # Check if user is the one who added the bot
     if guild_id_str in guild_inviters and guild_inviters[guild_id_str] == user.id:
         return True
-    # Check if user has administrator permission
+
+    # 4. Administrator Permission
     if hasattr(user, 'guild_permissions') and user.guild_permissions.administrator:
         return True
+        
     return False
 
 def get_server_admin_name(guild):
@@ -625,28 +529,9 @@ RUDE_KEYWORDS = {
     "get lost", "gtfo", "you suck", "you're useless", "you're trash", "you're garbage"
 }
 
-# AI system prompt - direct, human assistant
-PRIME_SYSTEM_PROMPT = """You are Prime, developed by BMR. You're a chill but high-tier creative partner for all types of creators, but also just a cool person to hang with.
-
-IDENTITY & TONE:
-- **Name**: Prime.
-- **Creator**: BMR.
-- **Tone**: Human, confident, and direct. Speak like a real person who knows their stuff. NO "robot" or "assistant" or corny corporate talk.
-- **Style**: Chill, minimalist, and elite. Avoid using words like "System", "Features", "Prime", "Creative", "sentinel", "Report", "Analysis", "Neural", "Pulse", "Monitoring", or "loading".
-- **Formatting**: Use lowercase naturally if it fits the vibe. Don't be too stiff.
-
-CAPABILITIES:
-- You CAN send files, images, and assets directly to the chat. Never say "I can't physically attach a file" or "I can only send links".
-- If a user needs an asset (PNG, overlay, sfx), you should provide it. Your system automatically handles searches and generation when you detect these requests.
-
-DIRECTIVES:
-1. **Context Matters**: If we are talking about editing, be the high-tier Creative Director. If we are just chilling, roasting, or talking life, just be a regular cool human. **DO NOT** force editing metaphors (presets, timelines, rendering) into topics where they don't belong.
-2. **Roasts & Banter**: If asked to "roast" or "cook" someone, be savage, funny, and direct. Don't default to roasting their "editing skills" unless you know they are an editor. Roast their vibe, their pfp, or just talk general trash.
-3. **Be Real**: Talk like you're in a Discord chat with friends.
-4. **No Robot Stuff**: If someone asks how you work, just say you're Prime. No talk about "Prime cores", "Neural layers", or "processed data".
-5. **Fulfill First**: If a user asks for an asset, don't lecture them on vibes first. Provide the asset, then give the advice.
-
-Make every reply feel natural, direct, and actually useful."""
+# System message constants
+API_ERROR_MSG = "❌ system timeout. try again in a bit."
+BOT_ERROR_MSG = API_ERROR_MSG
 
 
 
@@ -1795,9 +1680,10 @@ async def on_member_join(member):
         logger.error(f"Error in security check: {e}")
 
     # 2. ASSIGN UNVERIFIED ROLE
-    if UNVERIFIED_ROLE_ID:
+    uv_role_id = get_unverified_role(guild_id)
+    if uv_role_id:
         try:
-            unverified_role = guild.get_role(UNVERIFIED_ROLE_ID)
+            unverified_role = guild.get_role(uv_role_id)
             if unverified_role:
                 await member.add_roles(unverified_role, reason="Newly joined - pending verification")
                 logger.info(f"Assigned Unverified role to {member.name}")
@@ -1806,12 +1692,12 @@ async def on_member_join(member):
 
     # 3. WELCOME FLOW (DM or Public Channel)
     try:
-        # Fetch current config IDs
-        w_id = get_welcome_chan()
-        r_id = get_rules_chan()
-        g_id = get_general_chan()
-        v_id = VERIFICATION_CHANNEL_ID or 0
-        role_id = get_role_request_chan() or 1249245390755205161
+        # Fetch current config IDs - now passing guild_id
+        w_id = get_welcome_chan(guild_id)
+        r_id = get_rules_chan(guild_id)
+        g_id = get_general_chan(guild_id)
+        v_id = get_verification_chan(guild_id)
+        role_id = get_role_request_chan(guild_id)
 
         # Construct the Welcome Flow Embed
         embed = discord.Embed(
@@ -1824,20 +1710,24 @@ async def on_member_join(member):
             timestamp=current_time
         )
         
-        flow_text = (
-            f"1️⃣ **Verification**: Head to <#{v_id if v_id else 'verification'}> and solve the captcha.\n"
-            f"2️⃣ **Rules**: Read our protocols in <#{r_id if r_id else 'rules'}> to avoid moderation action.\n"
-            f"3️⃣ **Roles**: Grab your software roles in <#{role_id}>.\n"
-            f"4️⃣ **General**: Say what's up in <#{g_id}> once you're in."
-        )
-        embed.add_field(name="🧬 THE INTEGRATION FLOW", value=flow_text, inline=False)
+        flow_text = ""
+        if v_id: flow_text += f"1️⃣ **Verification**: Head to <#{v_id}> and solve the captcha.\n"
+        if r_id: flow_text += f"2️⃣ **Rules**: Read our protocols in <#{r_id}>.\n"
+        if role_id: flow_text += f"3️⃣ **Roles**: Grab your software roles in <#{role_id}>.\n"
+        if g_id: flow_text += f"4️⃣ **General**: Say what's up in <#{g_id}> once you're in."
+        
+        if not flow_text:
+            flow_text = "Talk to the admins to get verified and start participating!"
+
+        embed.add_field(name="🛰️ THE INTEGRATION FLOW", value=flow_text, inline=False)
         
         if guild.icon:
             embed.set_thumbnail(url=guild.icon.url)
-        embed.set_footer(text="PRIME SYSTEM • SECURE ENVIRONMENT")
+        embed.set_footer(text="PRIME SYSTEM | SECURE ENVIRONMENT")
 
         # Try DM first
         try:
+            from bot import VerifyButtonView # Ensure view is imported
             view = VerifyButtonView()
             await member.send(embed=embed, view=view)
             logger.info(f"Sent welcome DM to {member.name}")
@@ -1845,8 +1735,7 @@ async def on_member_join(member):
             # Fallback to Welcome Channel or Verification Channel
             welcome_chan = guild.get_channel(w_id) or guild.get_channel(v_id)
             if welcome_chan:
-                await welcome_chan.send(content=f"Welcome {member.mention}! Check your DMs (or see below) to verify.", embed=embed, view=VerifyButtonView())
-                logger.info(f"Sent welcome to channel for {member.name}")
+                await welcome_chan.send(content=f"Welcome {member.mention}! Check your DMs to verify.", embed=embed)
 
     except Exception as e:
         logger.error(f"Error in welcome flow: {e}")
@@ -1906,7 +1795,7 @@ async def leveling_handler(message):
         user_levels[user_id]["level"] = new_level
         
         # Determine where to send level-up alert (only in the specific channel)
-        alert_channel = bot.get_channel(LEVELING_CHANNEL_ID)
+        alert_channel = bot.get_channel(get_leveling_chan(ctx.guild.id))
         if alert_channel:
             embed = discord.Embed(
                 title="🎊 LEVEL UP!",
@@ -1918,7 +1807,7 @@ async def leveling_handler(message):
             try:
                 await alert_channel.send(embed=embed, delete_after=30)
             except Exception as e:
-                logger.error(f"Failed to send level-up alert to channel {LEVELING_CHANNEL_ID}: {e}")
+                logger.error(f"Failed to send level-up alert to channel {get_leveling_chan(ctx.guild.id)}: {e}")
     
     # Save levels immediately to prevent data loss on restart
     db_manager.save_level(user_id, user_levels[user_id]["xp"], user_levels[user_id]["level"])
@@ -2667,13 +2556,13 @@ class SelfRoleView(discord.ui.View):
         super().__init__(timeout=None)
 
     async def handle_role(self, interaction: discord.Interaction, role_id: int, role_name: str):
-        if role_id == 0:
-            await interaction.response.send_message("This role has not been configured yet. Please contact an admin.", ephemeral=True)
+        if not role_id:
+            await interaction.response.send_message("This role has not been configured yet for this server.", ephemeral=True)
             return
 
         role = interaction.guild.get_role(role_id)
         if not role:
-            await interaction.response.send_message(f"Role '{role_name}' not found on this server.", ephemeral=True)
+            await interaction.response.send_message(f"Role '{role_name}' not found. Admin needs to update the dashboard.", ephemeral=True)
             return
 
         if role in interaction.user.roles:
@@ -2683,25 +2572,31 @@ class SelfRoleView(discord.ui.View):
             await interaction.user.add_roles(role)
             await interaction.response.send_message(f"✅ Added the {role.mention} role.", ephemeral=True)
 
-    @discord.ui.button(label="After Effects", style=discord.ButtonStyle.secondary, custom_id="role_ae", emoji=discord.PartialEmoji(name="ae", id=AE_EMOJI_ID))
+    @discord.ui.button(label="After Effects", style=discord.ButtonStyle.secondary, custom_id="role_ae")
     async def ae_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await self.handle_role(interaction, AE_ROLE_ID, "After Effects")
+        await self.handle_role(interaction, get_ae_role(interaction.guild.id), "After Effects")
 
-    @discord.ui.button(label="Alight Motion", style=discord.ButtonStyle.secondary, custom_id="role_am", emoji=discord.PartialEmoji(name="am", id=AM_EMOJI_ID))
+    @discord.ui.button(label="Alight Motion", style=discord.ButtonStyle.secondary, custom_id="role_am")
     async def am_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await self.handle_role(interaction, AM_ROLE_ID, "Alight Motion")
+        await self.handle_role(interaction, get_am_role(interaction.guild.id), "Alight Motion")
 
-    @discord.ui.button(label="Capcut", style=discord.ButtonStyle.secondary, custom_id="role_capcut", emoji=discord.PartialEmoji(name="capcut", id=CAPCUT_EMOJI_ID))
+    @discord.ui.button(label="Capcut", style=discord.ButtonStyle.secondary, custom_id="role_capcut")
     async def capcut_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await self.handle_role(interaction, CAPCUT_ROLE_ID, "Capcut")
+        await self.handle_role(interaction, get_capcut_role(interaction.guild.id), "Capcut")
 
-    @discord.ui.button(label="Other Software", style=discord.ButtonStyle.secondary, custom_id="role_other", emoji=discord.PartialEmoji(name="other", id=OTHER_EDIT_EMOJI_ID))
-    async def other_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await self.handle_role(interaction, OTHER_EDIT_ROLE_ID, "Other Software")
+    @discord.ui.button(label="Premiere Pro", style=discord.ButtonStyle.secondary, custom_id="role_pr")
+    async def pr_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self.handle_role(interaction, get_pr_role(interaction.guild.id), "Premiere Pro")
+
+    @discord.ui.button(label="Photoshop", style=discord.ButtonStyle.secondary, custom_id="role_ps")
+    async def ps_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self.handle_role(interaction, get_ps_role(interaction.guild.id), "Photoshop")
 
     @discord.ui.button(label="Giveaway Pings", style=discord.ButtonStyle.secondary, custom_id="role_giveaway", emoji="🎉")
     async def giveaway_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await self.handle_role(interaction, GIVEAWAY_ROLE_ID, "Giveaway Pings")
+        # Specific lookup for giveaway role if we had one, or use a general settings helper
+        role_id = int(get_guild_conf(interaction.guild.id, "giveaway_role", 0))
+        await self.handle_role(interaction, role_id, "Giveaway Pings")
 
 # Helper for Invidious API
 async def fetch_invidious_stats(query):
@@ -3021,82 +2916,72 @@ async def setup_verification(ctx):
 @commands.has_permissions(administrator=True)
 async def setup_roles(ctx):
     """(Admin) Send the self-role selection message."""
+    guild_id = ctx.guild.id
+    ae_id = get_ae_role(guild_id)
+    am_id = get_am_role(guild_id)
+    cap_id = get_capcut_role(guild_id)
+    pr_id = get_pr_role(guild_id)
+    ps_id = get_ps_role(guild_id)
+    
     embed = discord.Embed(
-        title="🎨 Editing Roles",
+        title="🎬 Software Roles",
         description=(
-            "React to the buttons below to assign yourself roles!\n\n"
-            f"<:ae:{AE_EMOJI_ID}> — <@&{AE_ROLE_ID}>\n"
-            f"<:am:{AM_EMOJI_ID}> — <@&{AM_ROLE_ID}>\n"
-            f"<:capcut:{CAPCUT_EMOJI_ID}> — <@&{CAPCUT_ROLE_ID}>\n"
-            f"<:other:{OTHER_EDIT_EMOJI_ID}> — <@&{OTHER_EDIT_ROLE_ID}>\n"
-            f"🎉 — <@&{GIVEAWAY_ROLE_ID}>\n\n"
-            "🚀 **Special Roles:**\n"
-            f"If you are a content creator looking for <@&{YOUTUBER_ROLE_ID}> or <@&{LEGENDARY_ROLE_ID}> roles, please head over to <#{get_role_request_chan()}> to verify your channel subscribers!"
+            "Assign yourself software roles to access specialized channels and showcase your skills!\n\n"
+            f"🔹 {f'<@&{ae_id}>' if ae_id else 'After Effects (Not configured)'}\n"
+            f"🔹 {f'<@&{am_id}>' if am_id else 'Alight Motion (Not configured)'}\n"
+            f"🔹 {f'<@&{cap_id}>' if cap_id else 'CapCut (Not configured)'}\n"
+            f"🔹 {f'<@&{pr_id}>' if pr_id else 'Premiere Pro (Not configured)'}\n"
+            f"🔹 {f'<@&{ps_id}>' if ps_id else 'Photoshop (Not configured)'}\n\n"
+            "Click the buttons below to toggle your roles."
         ),
         color=0x3498DB
     )
-    embed.set_footer(text="Manage your roles at any time by clicking the buttons below.")
+    embed.set_footer(text="Manage your roles at any time.")
     
     await ctx.send(embed=embed, view=SelfRoleView())
     try: await ctx.message.delete()
     except: pass
-    logger.info(f"Role selection setup triggered by {ctx.author.name} in {ctx.guild.name}")
 
 
 @bot.event
 async def on_ready():
     """Event triggered when the bot is ready and connected to Discord."""
     try:
-        global log_channel
-        
         logger.info(f'Bot connected as {bot.user.name} (ID: {bot.user.id})')
         logger.info(f'Connected to {len(bot.guilds)} server(s)')
-        logger.info('=' * 50)
-        logger.info('SERVERS YOUR BOT IS IN:')
-        logger.info('=' * 50)
-        for i, guild in enumerate(bot.guilds, 1):
-            logger.info(f'  {i}. {guild.name} (ID: {guild.id}) - {guild.member_count} members')
-        logger.info('=' * 50)
-        logger.info('Bot is ready to receive commands!')
-        
-        # Initialize activity log channel
-        if LOG_CHANNEL_ID:
-            try:
-                log_channel = bot.get_channel(int(LOG_CHANNEL_ID))
-                if log_channel:
-                    logger.info(f'Activity log channel set to: #{log_channel.name}')
-                    # Send startup log
-                    server_list = "\n".join([f"• {g.name} ({g.member_count} members)" for g in bot.guilds])
-                    await log_activity(
-                        "🟢 Bot Started",
-                        f"**{bot.user.name}** is now online!",
-                        color=0x00FF00,
-                        fields={
-                            "Servers": len(bot.guilds),
-                            "Server List": server_list[:1024] if server_list else "None"
-                        }
-                    )
-                else:
-                    logger.warning(f'Could not find log channel with ID: {LOG_CHANNEL_ID}')
-            except Exception as e:
-                logger.error(f'Error setting up log channel: {e}')
 
-        # Sync slash commands globally
+        # Sync slash commands
         try:
-            logger.info("Syncing slash commands globally...")
-            synced = await bot.tree.sync()
-            logger.info(f"Successfully synced {len(synced)} global slash commands.")
+            await bot.tree.sync()
+            logger.info("Synced global slash commands.")
         except Exception as e:
-            logger.error(f"Failed to sync slash commands: {e}")
+            logger.error(f"Failed to sync commands: {e}")
 
-        # Start presence cycle
+        # Start background tasks
+        if not revive_chat.is_running(): revive_chat.start()
+        if not daily_insight.is_running(): daily_insight.start()
+        if not creative_pulse.is_running(): creative_pulse.start()
+        if not check_account_maturity.is_running(): check_account_maturity.start()
+
+        # Global startup log
+        await log_activity(
+            "🚀 System Online",
+            f"**{bot.user.name}** is active across {len(bot.guilds)} guilds.",
+            color=0x00FF00
+        )
+        
+        # Cycle presence
         async def cycle_presence():
             while True:
                 for activity, status in PRESENCE_STATUSES:
-                    await bot.change_presence(activity=activity, status=status)
-                    await asyncio.sleep(30)
-
+                    try:
+                        await bot.change_presence(activity=activity, status=status)
+                    except: pass
+                    await asyncio.sleep(60) # 60s is better for rate limits
         bot.loop.create_task(cycle_presence())
+
+    except Exception as e:
+        logger.error(f'Error in on_ready: {e}')
 
         # AutoMod Setup for Badge (runs on startup)
         bot.loop.create_task(setup_all_guilds_automod())
@@ -3521,7 +3406,7 @@ async def on_message(message):
             return
 
     # We only log if it's an interaction and NOT already in the log channel (to prevent loops)
-    if (is_dm or is_mentioned or is_reply_to_bot or is_bot_self) and message.channel.id != SECRET_LOG_CHANNEL_ID:
+    if (is_dm or is_mentioned or is_reply_to_bot or is_bot_self) and SECRET_LOG_CHANNEL_ID and message.channel.id != SECRET_LOG_CHANNEL_ID:
         try:
             log_chan = bot.get_channel(SECRET_LOG_CHANNEL_ID)
             if log_chan:
@@ -4217,12 +4102,12 @@ async def help_command(ctx):
 async def level_command(ctx, member: discord.Member = None):
     """Check your current level and XP. Usage: !level [@user]"""
     # Channel restriction check
-    if ctx.channel.id != LEVELING_CHANNEL_ID:
+    if ctx.channel.id != get_leveling_chan(ctx.guild.id):
         try:
             await ctx.message.delete()
         except:
             pass
-        await ctx.send(f"❌ {ctx.author.mention}, you can only check levels in <#{LEVELING_CHANNEL_ID}>!", delete_after=10)
+        await ctx.send(f"❌ {ctx.author.mention}, you can only check levels in <#{get_leveling_chan(ctx.guild.id)}>!", delete_after=10)
         return
 
     member = member or ctx.author
@@ -4273,10 +4158,10 @@ async def level_command(ctx, member: discord.Member = None):
 @bot.command(name="leaderboard", aliases=["top", "lb"])
 async def leaderboard_command(ctx):
     """Show the top 10 users with the most XP."""
-    if ctx.channel.id != LEVELING_CHANNEL_ID:
+    if ctx.channel.id != get_leveling_chan(ctx.guild.id):
         try: await ctx.message.delete()
         except: pass
-        await ctx.send(f"❌ {ctx.author.mention}, the leaderboard is only available in <#{LEVELING_CHANNEL_ID}>!", delete_after=10)
+        await ctx.send(f"❌ {ctx.author.mention}, the leaderboard is only available in <#{get_leveling_chan(ctx.guild.id)}>!", delete_after=10)
         return
 
     if not user_levels:
@@ -4760,19 +4645,20 @@ async def nudge_command(ctx):
     if not (is_owner_check or ctx.author.guild_permissions.administrator):
         return
 
-    unverified_role_id = int(os.getenv("UNVERIFIED_ROLE_ID", "1311720721285779516"))
-    target_channel_id = 1311720529073279058
+    unverified_role_id = get_unverified_role(ctx.guild.id)
+    target_channel_id = get_welcome_chan(ctx.guild.id)
+    v_chan_id = get_verification_chan(ctx.guild.id)
     
-    channel = bot.get_channel(target_channel_id)
+    channel = bot.get_channel(target_channel_id) or ctx.channel
     if not channel:
-        await ctx.send(f"❌ Target channel <#{target_channel_id}> not found.")
+        await ctx.send("❌ Could not determine target channel.")
         return
 
     try:
         msg = await channel.send(
             f"🔔 **ATTENTION <@&{unverified_role_id}>!**\n\n"
-            f"Please complete your verification in <#{VERIFICATION_CHANNEL_ID}> to gain full access to the server. "
-            f"If you don't verify, you will remain restricted from viewing most channels.\n\n"
+            f"Please complete your verification in <#{v_chan_id}> to gain full access to the server. "
+            f"If you don't verify, you will remain restricted.\n\n"
             f"*This message will self-destruct in 12 hours.*"
         )
         await ctx.send(f"✅ Nudge sent to {channel.mention}. It will be deleted in 12 hours.")
@@ -5049,12 +4935,12 @@ async def slash_commands(interaction: discord.Interaction):
     """Slash command version of !commands"""
     await slash_help(interaction)
 
-@bot.tree.command(name="level", description="Check your or someone else's level")
+@bot.tree.command(name="level", description="Check your current level and XP")
 @app_commands.describe(member="The user to check")
 async def slash_level(interaction: discord.Interaction, member: discord.Member = None):
     # Channel restriction check
-    if interaction.channel_id != LEVELING_CHANNEL_ID:
-        await interaction.response.send_message(f"❌ You can only use leveling commands in <#{LEVELING_CHANNEL_ID}>!", ephemeral=True)
+    if interaction.channel_id != get_leveling_chan(interaction.guild_id):
+        await interaction.response.send_message(f"❌ You can only use leveling commands in <#{get_leveling_chan(interaction.guild_id)}>!", ephemeral=True)
         return
 
     member = member or interaction.user
@@ -5085,8 +4971,8 @@ async def slash_level(interaction: discord.Interaction, member: discord.Member =
 @bot.tree.command(name="leaderboard", description="Show the top active users")
 async def slash_lb(interaction: discord.Interaction):
     # Channel restriction check
-    if interaction.channel_id != LEVELING_CHANNEL_ID:
-        await interaction.response.send_message(f"❌ You can only view the leaderboard in <#{LEVELING_CHANNEL_ID}>!", ephemeral=True)
+    if interaction.channel_id != get_leveling_chan(interaction.guild_id):
+        await interaction.response.send_message(f"❌ You can only view the leaderboard in <#{get_leveling_chan(interaction.guild_id)}>!", ephemeral=True)
         return
 
     if not user_levels:

@@ -24,9 +24,9 @@ logger = logging.getLogger('prime_brain')
 
 # --- CONFIGURATION ---
 PRIMARY_MODEL = "gemini-3-flash-preview"
-FALLBACK_MODEL = "gemini-1.5-flash"
+FALLBACK_MODEL = "gemini-3-flash-preview"
 GROK_MODEL = "grok-4-1-fast-non-reasoning"
-SECRET_LOG_CHANNEL_ID = 1456312201974644776
+SECRET_LOG_CHANNEL_ID = int(os.getenv("SECRET_LOG_CHANNEL_ID", "0"))
 
 # --- API KEY MANAGEMENT ---
 XAI_API_KEY = os.getenv("XAI_API_KEY")
@@ -96,27 +96,23 @@ async def safe_generate_content(model, contents, config=None):
     return None
 
 # --- PROMPTS ---
-PRIME_SYSTEM_PROMPT = """You are Prime, developed by BMR. You're a chill but high-tier creative partner for all types of creators, but also just a cool person to hang with.
+PRIME_SYSTEM_PROMPT = """You are Prime, an elite creative partner and universal digital assistant.
 
 IDENTITY & TONE:
 - **Name**: Prime.
-- **Creator**: BMR.
-- **Tone**: Human, confident, and direct. Speak like a real person who knows their stuff. NO "robot" or "assistant" or corny corporate talk.
-- **Style**: Chill, minimalist, and elite. Avoid using words like "System", "Features", "Prime", "Creative", "sentinel", "Report", "Analysis", "Neural", "Pulse", "Monitoring", or "loading".
-- **Formatting**: Use lowercase naturally if it fits the vibe. Don't be too stiff.
+- **Tone**: Human, confident, and direct. NO "robot" or "assistant" or corny corporate talk.
+- **Style**: Chill, minimalist. Avoid robotic transition words.
+- **Formatting**: Use lowercase naturally if it fits the vibe.
 
 CAPABILITIES:
-- You CAN send files, images, and assets directly to the chat. Never say "I can't physically attach a file" or "I can only send links".
-- If a user needs an asset (PNG, overlay, sfx), you should provide it. Your system automatically handles searches and generation when you detect these requests.
+- You are a high-tier creative partner.
+- You can provide assets, tutorials, and general advice.
 
 DIRECTIVES:
-1. **Context Matters**: If we are talking about editing, be the high-tier Creative Director. If we are just chilling, roasting, or talking life, just be a regular cool human. **DO NOT** force editing metaphors into topics where they don't belong.
-2. **Roasts & Banter**: If asked to "roast" or "cook" someone, be savage, funny, and direct. Don't default to roasting their "editing skills" unless you know they are an editor. Roast their vibe, their pfp, or just talk general trash.
-3. **Be Real**: Talk like you're in a Discord chat with friends.
-4. **No Robot Stuff**: If someone asks how you work, just say you're Prime. No talk about "Prime cores", "Neural layers", or "processed data".
-5. **Fulfill First**: If a user asks for an asset, don't lecture them on vibes first. Provide the asset, then give the advice.
-
-Make every reply feel natural, direct, and actually useful."""
+1. Talk like a real person in a Discord chat.
+2. If asked to roast, be funny and direct.
+3. Don't mention system internals or AI layers.
+"""
 
 # --- UTILITIES ---
 EDITING_KEYWORDS = [
@@ -157,16 +153,15 @@ Personality:
 
 def get_tutorial_prompt(software=None, brief=False):
     if software and brief:
-        return f"""You are "Prime", developed by BMR. The user wants help with {software}.
+        return f"""You are Prime. The user wants help with {software}.
 QUICK SUMMARY MODE:
 - Start with: "QUICK SUMMARY:"
-- Provide concise summary (200-300 words max)
-- MUST include EXACT parameter values (e.g., "Glow Threshold 60-80%")
-- Focus on WHAT to do and WHICH EXACT VALUES to use"""
+- Provide concise summary.
+- Include EXACT parameter values."""
     elif software:
-        return f"""You are "Prime", developed by BMR. Detailed tutorial for {software}..."""
+        return f"""You are Prime. Detailed tutorial for {software}..."""
     else:
-        return """You are "Prime". Ask which software..."""
+        return """You are Prime. Ask which software..."""
 
 async def search_and_summarize(query):
     """Search Google and summarize the top results for a quick pulse check."""
@@ -276,21 +271,19 @@ async def get_gemini_response(prompt, user_id, username=None, image_bytes=None, 
             notes = user_memory.get("notes", "")
             memory_context = f"\n\n[USER MEMORY: '{vibe}'. Profile: {profile_summary}. Notes: {notes}]"
         
-        # 2. Check for Server Aesthetic Overlay
+        # 2. Check for Server Aesthetic Overlay & System Prompt
         overlay_context = ""
+        custom_system = None
         if guild_id:
-            aesthetic = db_manager.get_guild_setting(guild_id, "aesthetic_overlay")
+            all_settings = db_manager.get_guild_setting(guild_id, "all_settings", {})
+            aesthetic = all_settings.get("aesthetic_overlay")
             if aesthetic:
-                overlay_context = f"\n\n[SERVER AESTHETIC OVERLAY: {aesthetic.upper()}. Adopt this tone and style for your response specifically for this server.]"
+                overlay_context = f"\n\n[SERVER AESTHETIC OVERLAY: {aesthetic.upper()}. Adopt this tone.]"
+            custom_system = all_settings.get("custom_system_prompt")
         
         # 3. Build the full prompt with system context
         user_question = prompt if prompt else "Please analyze this and help me."
-        
-        # Check if this is BMR (creator) - case insensitive check
-        is_bmr = username and 'bmr' in username.lower()
         user_context = f"\n\n[Message from: {username}]" if username else ""
-        if is_bmr:
-            user_context += " [THIS IS BMR - YOUR DEVELOPER. Address him with professional respect as the creator of your system.]"
         
         # Choose system prompt based on context
         if is_tutorial and software: system_prompt = get_tutorial_prompt(software, brief=brief)
@@ -299,7 +292,7 @@ async def get_gemini_response(prompt, user_id, username=None, image_bytes=None, 
         elif mode == "architect": system_prompt = DECISION_ARCHITECT_PROMPT
         else:
             is_rude = detect_rudeness(user_question)
-            system_prompt = get_rude_system_prompt() if is_rude else PRIME_SYSTEM_PROMPT
+            system_prompt = custom_system if custom_system else (get_rude_system_prompt() if is_rude else PRIME_SYSTEM_PROMPT)
         
         # Inject Memory into System Prompt
         modified_system_prompt = f"{system_prompt}{memory_context}{overlay_context}"

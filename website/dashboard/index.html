@@ -4,211 +4,401 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PRIME AI | COMMAND</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link
-        href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,100..900;1,9..144,100..900&family=Outfit:wght@100;300;600;900&family=Space+Grotesk:wght@300;700&display=swap"
-        rel="stylesheet">
+    <title>PRIME // DASHBOARD</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="style.css">
 </head>
 
-<body class="auth-pending">
-    <div id="loginOverlay" class="login-overlay">
-        <div class="login-card">
-            <div class="logo">Prime<span>.</span></div>
-            <h1>Prime Access</h1>
-            <p>Connect with Discord to enter the Command Center.</p>
-            <a href="../login.json" class="btn-login"><i class="fab fa-discord"></i> Login with Discord</a>
-        </div>
+<body class="loading">
+
+    <div class="noise"></div>
+    <div class="liquid-bg">
+        <div class="blob"></div>
     </div>
 
-    <div class="back-to-top" id="backToTop" onclick="scrollToTop()" title="Go to top">
-        <i class="fa-solid fa-chevron-up"></i>
-    </div>
-    <div class="aura-container">
-        <div class="aura"></div>
-        <div class="aura aura-2"></div>
+    <!-- ENTRY -->
+    <div id="loginGate" class="gate">
+        <h1>PRIME <span>OS</span></h1>
+        <a href="/login" class="btn-main">INITIALIZE</a>
     </div>
 
-    <aside class="sidebar">
-        <div class="sidebar-header">
-            <div class="logo">Prime<span>.</span></div>
-        </div>
-        <nav class="sidebar-nav">
-            <a href="#" class="nav-item active"><i class="fas fa-th-large"></i><span>Dashboard</span></a>
-            <a href="#" class="nav-item"><i class="fas fa-robot"></i><span>AI Insights</span></a>
-            <a href="#" class="nav-item"><i class="fas fa-shield-halved"></i><span>Moderation</span></a>
-            <a href="#" class="nav-item"><i class="fas fa-chart-line"></i><span>Analytics</span></a>
-            <a href="#" class="nav-item"><i class="fas fa-server"></i><span>Guilds</span></a>
-            <a href="#" class="nav-item"><i class="fas fa-cog"></i><span>Settings</span></a>
-        </nav>
-        <div class="sidebar-footer">
+    <!-- DASHBOARD -->
+    <div id="app" class="os-container">
+
+        <aside class="sidebar">
+            <div class="brand">PRIME<span>.</span></div>
+            <nav>
+                <button class="nav-item active" data-tab="overview"><i class="fas fa-grid-2"></i> OVERVIEW</button>
+                <button class="nav-item" data-tab="servers"><i class="fas fa-server"></i> SERVERS</button>
+                <button class="nav-item" data-tab="customization" id="navCustomization"><i class="fas fa-sliders"></i>
+                    CUSTOMIZATION</button>
+                <button class="nav-item" data-tab="ranks"><i class="fas fa-trophy"></i> RANKINGS</button>
+            </nav>
             <div class="user-pill">
-                <div class="avatar">B</div>
+                <img id="userAvatar" src="" alt="">
                 <div class="user-info">
-                    <div class="user-name">BMR</div>
-                    <div class="user-role">System Developer</div>
+                    <strong id="userName">---</strong>
+                    <a href="/logout">LOGOUT SESSION</a>
                 </div>
             </div>
-            <div class="sidebar-legal">
-                <a href="../terms.html">Terms</a>
-                <span>//</span>
-                <a href="../privacy.html">Privacy</a>
+        </aside>
+
+        <main class="viewport">
+            <header class="header">
+                <div class="status">STATUS: <b>NOMINAL</b></div>
+                <div class="status" id="osClock">00:00:00</div>
+            </header>
+
+            <div class="scroll-area">
+
+                <!-- SECTION: OVERVIEW -->
+                <section id="tab-overview" class="tab active">
+                    <div class="welcome-msg">
+                        <h1>WELCOME BACK, <br><span id="welcomeName">---</span></h1>
+                    </div>
+
+                    <div class="stats-grid">
+                        <div class="stat-card">
+                            <i class="fas fa-users-viewfinder"></i>
+                            <small>GLOBAL USERS</small>
+                            <h2 id="statUsers">--</h2>
+                        </div>
+                        <div class="stat-card">
+                            <small>DATA SIGNALS</small>
+                            <h2 id="statMsgs">--</h2>
+                        </div>
+                        <div class="stat-card">
+                            <small>BOT UPTIME</small>
+                            <h2 id="statStatus">99.9%</h2>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- SECTION: SERVERS -->
+                <section id="tab-servers" class="tab">
+                    <div class="welcome-msg">
+                        <h1>MANAGED SERVERS</h1>
+                    </div>
+                    <div id="guildGrid" class="guild-grid">
+                        <!-- Injection -->
+                    </div>
+                </section>
+
+                <!-- SECTION: RANKS -->
+                <section id="tab-ranks" class="tab">
+                    <div class="welcome-msg">
+                        <h1>TOP OPERATORS</h1>
+                    </div>
+                    <div id="leaderboardList" class="rank-list">
+                        <!-- Injection -->
+                    </div>
+                </section>
+
+                <!-- SECTION: CUSTOMIZATION -->
+                <section id="tab-customization" class="tab">
+                    <div class="cust-header">
+                        <div class="welcome-msg">
+                            <h1 id="custTitle">SELECT A SERVER</h1>
+                            <p id="custSub">Configure your bot behavior and channel mappings</p>
+                        </div>
+                        <div class="cust-actions">
+                            <button type="button" class="btn-sync-top" onclick="saveActiveSettings()">SYNC ALL
+                                CHANGES</button>
+                        </div>
+                    </div>
+
+                    <!-- AI ARCHITECT SECTION -->
+                    <div id="aiArchitectSection" class="cust-layout" style="display: none; margin-bottom: 4rem;">
+                        <div class="architect-card">
+                            <div class="arch-info">
+                                <h3><i class="fas fa-microchip-ai"></i> AI ARCHITECT</h3>
+                                <p>Describe your ideal server structure (channels, categories, roles). Prime will build
+                                    it instantly.</p>
+                            </div>
+                            <div class="arch-input">
+                                <textarea id="aiArchPrompt"
+                                    placeholder="e.g. Create a gaming server with categories for 'General', 'Esports', and 'Voice'. Add roles for 'Pro', 'Casual', and 'Moderator'."></textarea>
+                                <button type="button" class="btn-arch" onclick="triggerAiBuild()">GENERATE SERVER
+                                    ARCHITECTURE</button>
+                            </div>
+                            <div id="aiArchPlanReview"
+                                style="display: none; margin-top: 2rem; border-top: 1px solid rgba(255,170,0,0.1); padding-top: 2rem;">
+                                <h4>PROPOSED ARCHITECTURE</h4>
+                                <div id="aiPlanList" class="plan-list">
+                                    <!-- Plan items injection -->
+                                </div>
+                                <button type="button" class="btn-arch" style="margin-top: 1.5rem;"
+                                    onclick="executeAiBuild()">EXECUTE APPROVED BUILD</button>
+                            </div>
+                            <div class="arch-warning">
+                                <i class="fas fa-triangle-exclamation"></i>
+                                <span>Note: This will create new channels and roles in your Discord server.</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="noGuildSelected" class="empty-state">
+                        <i class="fas fa-ghost"></i>
+                        <h3>NO SERVER SELECTED</h3>
+                        <p>Go to the SERVERS tab and select a server to customize its settings.</p>
+                        <button class="btn-trigger" onclick="Dashboard.switchTab('servers')">BROWSE SERVERS</button>
+                    </div>
+
+                    <div id="custFormContainer" class="cust-layout" style="display: none;">
+                        <form id="mainConfigForm">
+                            <div class="cust-grid">
+                                <!-- COLUMN 1: CORE & CHANNELS -->
+                                <div class="cust-col">
+                                    <div class="cust-section">
+                                        <h4><i class="fas fa-brain"></i> SYSTEM CORE</h4>
+                                        <div class="field">
+                                            <label>COMMAND PREFIX</label>
+                                            <input type="text" id="mCfgPrefix" placeholder="!">
+                                        </div>
+                                        <div class="field">
+                                            <label>PERSONALITY VIBE</label>
+                                            <select id="mCfgVibe">
+                                                <option value="chill">CHILL</option>
+                                                <option value="savage">SAVAGE</option>
+                                                <option value="professional">PROFESSIONAL</option>
+                                            </select>
+                                        </div>
+                                    </div>
+
+                                    <div class="cust-section">
+                                        <h4><i class="fas fa-door-open"></i> ENTRY & LOGS</h4>
+                                        <div class="field">
+                                            <label>WELCOME CHANNEL (ID)</label>
+                                            <input type="text" id="mCfgWelcomeChan" placeholder="1234...">
+                                        </div>
+                                        <div class="field">
+                                            <label>LOG CHANNEL (ID)</label>
+                                            <input type="text" id="mCfgLogChan" placeholder="1234...">
+                                        </div>
+                                        <div class="field">
+                                            <label>RULES CHANNEL (ID)</label>
+                                            <input type="text" id="mCfgRulesChan" placeholder="1234...">
+                                        </div>
+                                    </div>
+
+                                    <div class="cust-section">
+                                        <h4><i class="fas fa-shield-halved"></i> VERIFICATION</h4>
+                                        <div class="field has-trigger">
+                                            <label>VERIFICATION CHANNEL (ID)</label>
+                                            <div class="input-group">
+                                                <input type="text" id="mCfgVerifyChan" placeholder="1234...">
+                                                <button type="button" class="btn-trigger"
+                                                    onclick="triggerAction('verification')">SEND SETUP</button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- COLUMN 2: ROLES & EDITOR -->
+                                <div class="cust-col">
+                                    <div class="cust-section">
+                                        <h4><i class="fas fa-user-shield"></i> DEFAULT ROLES</h4>
+                                        <div class="field">
+                                            <label>VERIFIED ROLE (ID)</label>
+                                            <input type="text" id="mCfgVerifiedRole" placeholder="1234...">
+                                        </div>
+                                        <div class="field">
+                                            <label>UNVERIFIED ROLE (ID)</label>
+                                            <input type="text" id="mCfgUnverifiedRole" placeholder="1234...">
+                                        </div>
+                                        <div class="field">
+                                            <label>MUTED ROLE (ID)</label>
+                                            <input type="text" id="mCfgMutedRole" placeholder="1234...">
+                                        </div>
+                                    </div>
+
+                                    <div class="cust-section">
+                                        <h4><i class="fas fa-video"></i> EDITOR ROLES</h4>
+                                        <div class="setup-bar">
+                                            <button type="button" class="btn-trigger-wide"
+                                                onclick="triggerAction('roles')">SEND ROLE SELECTION MESSAGE</button>
+                                        </div>
+                                        <div class="cust-subgrid">
+                                            <div class="field"><label>AE</label><input type="text" id="mCfgAeRole"
+                                                    placeholder="ID"></div>
+                                            <div class="field"><label>AM</label><input type="text" id="mCfgAmRole"
+                                                    placeholder="ID"></div>
+                                            <div class="field"><label>CAPCUT</label><input type="text"
+                                                    id="mCfgCapcutRole" placeholder="ID"></div>
+                                            <div class="field"><label>PR</label><input type="text" id="mCfgPrRole"
+                                                    placeholder="ID"></div>
+                                            <div class="field"><label>PS</label><input type="text" id="mCfgPsRole"
+                                                    placeholder="ID"></div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- COLUMN 3: ADVANCED & AI -->
+                                <div class="cust-col">
+                                    <div class="cust-section">
+                                        <h4><i class="fas fa-wand-magic-sparkles"></i> AI PERSONA</h4>
+                                        <div class="field">
+                                            <label>AESTHETIC OVERLAY (MOOD)</label>
+                                            <input type="text" id="mCfgAesthetic"
+                                                placeholder="CYBERPUNK, MINIMALIST...">
+                                        </div>
+                                        <div class="field">
+                                            <label>CUSTOM SYSTEM PROMPT</label>
+                                            <textarea id="mCfgPrompt" placeholder="Talk like a pirate..."></textarea>
+                                        </div>
+                                    </div>
+
+                                    <div class="cust-section">
+                                        <h4><i class="fas fa-hashtag"></i> OTHER CHANNELS</h4>
+                                        <div class="field">
+                                            <label>GENERAL CHANNEL</label>
+                                            <input type="text" id="mCfgGeneralChan" placeholder="1234...">
+                                        </div>
+                                        <div class="field">
+                                            <label>LEVELING CHANNEL</label>
+                                            <input type="text" id="mCfgLevelChan" placeholder="1234...">
+                                        </div>
+                                        <div class="field">
+                                            <label>ROLE REQUEST (ID)</label>
+                                            <input type="text" id="mCfgRoleReqChan" placeholder="1234...">
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </form>
+                    </div>
+                </section>
+
             </div>
-            <div style="margin-top: 15px; opacity: 0.8;">
-                <a href="//www.dmca.com/Protection/Status.aspx?ID=efb298ce-8ae5-4442-be12-37a2c935a40d"
-                    title="DMCA.com Protection Status" class="dmca-badge">
-                    <img src="https://images.dmca.com/Badges/dmca-badge-w200-5x1-08.png?ID=efb298ce-8ae5-4442-be12-37a2c935a40d"
-                        alt="DMCA.com Protection Status" style="width: 100%; max-width: 180px;" />
-                </a>
-                <script src="https://images.dmca.com/Badges/DMCABadgeHelper.min.js"> </script>
+        </main>
+    </div>
+
+    <!-- SETTINGS MODAL -->
+    <div id="configModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-head">
+                <h3 id="modalTitle">SERVER CONFIG</h3>
+                <button class="close" onclick="closeModal()">&times;</button>
             </div>
+            <form id="configForm">
+                <div class="modal-scroll">
+                    <!-- CORE SETTINGS -->
+                    <div class="form-section">
+                        <h4>SYSTEM CORE</h4>
+                        <div class="field">
+                            <label>COMMAND PREFIX</label>
+                            <input type="text" id="cfgPrefix" placeholder="!">
+                        </div>
+                        <div class="field">
+                            <label>PERSONALITY VIBE</label>
+                            <select id="cfgVibe">
+                                <option value="chill">CHILL</option>
+                                <option value="savage">SAVAGE</option>
+                                <option value="professional">PROFESSIONAL</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- CHANNEL CONFIG -->
+                    <div class="form-section">
+                        <h4>SERVER CHANNELS</h4>
+                        <div class="field">
+                            <label>WELCOME CHANNEL</label>
+                            <input type="text" id="cfgWelcomeChan" placeholder="1234...">
+                        </div>
+                        <div class="field">
+                            <label>LOG CHANNEL</label>
+                            <input type="text" id="cfgLogChan" placeholder="1234...">
+                        </div>
+                        <div class="field">
+                            <label>RULES CHANNEL</label>
+                            <input type="text" id="cfgRulesChan" placeholder="1234...">
+                        </div>
+                        <div class="field">
+                            <label>ROLE REQUEST CHANNEL</label>
+                            <input type="text" id="cfgRoleReqChan" placeholder="1234...">
+                        </div>
+                        <div class="field has-trigger">
+                            <label>VERIFICATION CHANNEL</label>
+                            <div class="input-group">
+                                <input type="text" id="cfgVerifyChan" placeholder="1234...">
+                                <button type="button" class="btn-trigger" onclick="triggerAction('verification')">SEND
+                                    SETUP</button>
+                            </div>
+                        </div>
+                        <div class="field">
+                            <label>LEVELING CHANNEL</label>
+                            <input type="text" id="cfgLevelChan" placeholder="1234...">
+                        </div>
+                        <div class="field">
+                            <label>GENERAL CHANNEL</label>
+                            <input type="text" id="cfgGeneralChan" placeholder="1234...">
+                        </div>
+                    </div>
+
+                    <!-- ROLE CONFIG -->
+                    <div class="form-section">
+                        <h4>ROLE PERMISSIONS (IDs)</h4>
+                        <div class="field">
+                            <label>VERIFIED ROLE</label>
+                            <input type="text" id="cfgVerifiedRole" placeholder="1234...">
+                        </div>
+                        <div class="field">
+                            <label>UNVERIFIED ROLE</label>
+                            <input type="text" id="cfgUnverifiedRole" placeholder="1234...">
+                        </div>
+                        <div class="field">
+                            <label>MUTED ROLE</label>
+                            <input type="text" id="cfgMutedRole" placeholder="1234...">
+                        </div>
+                    </div>
+
+                    <!-- SOFTWARE ROLES -->
+                    <div class="form-section">
+                        <h4>EDITOR ROLES (IDs)</h4>
+                        <div class="setup-bar">
+                            <button type="button" class="btn-trigger-wide" onclick="triggerAction('roles')">SEND ROLE
+                                SELECTION MESSAGE</button>
+                        </div>
+                        <div class="field">
+                            <label>AFTER EFFECTS (AE)</label>
+                            <input type="text" id="cfgAeRole" placeholder="1234...">
+                        </div>
+                        <div class="field">
+                            <label>ALIGHT MOTION (AM)</label>
+                            <input type="text" id="cfgAmRole" placeholder="1234...">
+                        </div>
+                        <div class="field">
+                            <label>CAPCUT</label>
+                            <input type="text" id="cfgCapcutRole" placeholder="1234...">
+                        </div>
+                        <div class="field">
+                            <label>PREMIERE PRO (PR)</label>
+                            <input type="text" id="cfgPrRole" placeholder="1234...">
+                        </div>
+                        <div class="field">
+                            <label>PHOTOSHOP (PS)</label>
+                            <input type="text" id="cfgPsRole" placeholder="1234...">
+                        </div>
+                    </div>
+
+                    <!-- ADVANCED -->
+                    <div class="form-section">
+                        <h4>ADVANCED OVERLAYS</h4>
+                        <div class="field">
+                            <label>AESTHETIC OVERLAY (mood)</label>
+                            <input type="text" id="cfgAesthetic" placeholder="CYBERPUNK, MINIMALIST...">
+                        </div>
+                        <div class="field">
+                            <label>CUSTOM SYSTEM PROMPT</label>
+                            <textarea id="cfgPrompt" placeholder="Talk like a pirate..."></textarea>
+                        </div>
+                    </div>
+                </div>
+                <button type="submit" class="btn-save">SYNC CHANGES</button>
+            </form>
         </div>
-    </aside>
-
-    <main class="content">
-        <header class="top-bar">
-            <div class="search-bar">
-                <i class="fas fa-search"></i>
-                <input type="text" placeholder="Search system logs or users...">
-            </div>
-            <div class="top-actions">
-                <div class="status-indicator">
-                    <div class="dot online"></div>
-                    <span>SYSTEM ONLINE</span>
-                </div>
-                <button class="btn-icon"><i class="fas fa-bell"></i><span class="badge"></span></button>
-            </div>
-        </header>
-
-        <section class="dashboard-grid">
-            <!-- Welcome Card -->
-            <div class="card welcome-card">
-                <div class="welcome-text">
-                    <h2>Welcome back, <span>BMR</span>.</h2>
-                    <p>Prime AI is currently monitoring 12 servers with optimal performance levels.</p>
-                    <div class="metrics">
-                        <div class="metric">
-                            <span class="m-val" id="uptimeVal">99.9%</span>
-                            <span class="m-label">Uptime</span>
-                        </div>
-                        <div class="metric">
-                            <span class="m-val" id="ramVal">--%</span>
-                            <span class="m-label">RAM Load</span>
-                        </div>
-                    </div>
-                </div>
-                <div class="welcome-graphic">
-                    <div class="orb"></div>
-                </div>
-            </div>
-
-            <!-- Stats Mini Cards -->
-            <div class="stats-row">
-                <div class="card stat-card">
-                    <div class="stat-icon p-color"><i class="fas fa-users"></i></div>
-                    <div class="stat-info">
-                        <h3 id="totalUsersVal">14,204</h3>
-                        <p>Total Users</p>
-                    </div>
-                    <div class="trend up">+12%</div>
-                </div>
-                <div class="card stat-card">
-                    <div class="stat-icon s-color"><i class="fas fa-terminal"></i></div>
-                    <div class="stat-info">
-                        <h3 id="totalCmdsVal">42.5k</h3>
-                        <p>Cmds Executed</p>
-                    </div>
-                    <div class="trend up">+8%</div>
-                </div>
-                <div class="card stat-card">
-                    <div class="stat-icon t-color"><i class="fas fa-brain"></i></div>
-                    <div class="stat-info">
-                        <h3 id="aiReflectionsVal">1.2k</h3>
-                        <p>AI Reflections</p>
-                    </div>
-                    <div class="trend up">+24%</div>
-                </div>
-            </div>
-
-            <!-- Activity & Logs -->
-            <div class="card logs-card">
-                <div class="card-header">
-                    <h3>Neural Activity Feed</h3>
-                    <button class="btn-text">View All</button>
-                </div>
-                <div class="log-list" id="activityList">
-                    <div class="log-item">
-                        <div class="log-time">2m ago</div>
-                        <div class="log-content">
-                            <strong>AI Reflection:</strong> Updated vibe for <span class="mention">@Rayan</span> to
-                            'Creative'.
-                        </div>
-                    </div>
-                    <div class="log-item">
-                        <div class="log-time">5m ago</div>
-                        <div class="log-content">
-                            <strong>Moderation:</strong> Auto-warned <span class="mention">@User123</span> for spam in
-                            #general.
-                        </div>
-                    </div>
-                    <div class="log-item">
-                        <div class="log-time">12m ago</div>
-                        <div class="log-content">
-                            <strong>Level Up:</strong> <span class="mention">@Zion</span> reached Level 15 in server
-                            'Editor Hub'.
-                        </div>
-                    </div>
-                    <div class="log-item">
-                        <div class="log-time">18m ago</div>
-                        <div class="log-content">
-                            <strong>Asset Finder:</strong> Provided 5 SFX links for 'cinematic transition'.
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Vibe Distribution -->
-            <div class="card chart-card">
-                <div class="card-header">
-                    <h3>User Vibe Analysis</h3>
-                </div>
-                <div class="vibe-chart" id="vibeChart">
-                    <div class="vibe-bar" style="--val: 45%; --color: var(--p);">
-                        <span class="v-label">Creative Flow</span>
-                        <div class="v-progress"></div>
-                        <span class="v-percent">45%</span>
-                    </div>
-                    <div class="vibe-bar" style="--val: 30%; --color: var(--s);">
-                        <span class="v-label">Technical Insight</span>
-                        <div class="v-progress"></div>
-                        <span class="v-percent">30%</span>
-                    </div>
-                    <div class="vibe-bar" style="--val: 15%; --color: #fff;">
-                        <span class="v-label">Quiet Presence</span>
-                        <div class="v-progress"></div>
-                        <span class="v-percent">15%</span>
-                    </div>
-                    <div class="vibe-bar" style="--val: 10%; --color: var(--t);">
-                        <span class="v-label">Tension/Care</span>
-                        <div class="v-progress"></div>
-                        <span class="v-percent">10%</span>
-                    </div>
-                </div>
-            </div>
-            <!-- Connected Servers -->
-            <div class="card guilds-card">
-                <div class="card-header">
-                    <h3>Connected Servers</h3>
-                </div>
-                <div class="guild-list" id="guildList">
-                    <p style="opacity:0.5; font-size:0.9rem;">Connecting to neural network...</p>
-                </div>
-            </div>
-        </section>
-    </main>
+    </div>
 
     <script src="script.js"></script>
 </body>
