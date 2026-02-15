@@ -271,7 +271,10 @@ async function triggerAction(action) {
 }
 
 async function saveActiveSettings() {
-    if (!Dashboard.activeGuild) return;
+    if (!Dashboard.activeGuild) {
+        alert("🛡️ PROTOCOL DENIED: Target server missing from the synchronization relay.");
+        return;
+    }
     const btn = document.querySelector('.btn-sync-top');
     const oldText = btn.textContent;
     btn.textContent = "SYNCING SIGNALS...";
@@ -312,7 +315,10 @@ async function saveActiveSettings() {
 }
 
 async function triggerAiBuild() {
-    if (!Dashboard.activeGuild) return;
+    if (!Dashboard.activeGuild) {
+        alert("🛡️ PROTOCOL DENIED: No active server selected for architectural planning.");
+        return;
+    }
     const promptField = document.getElementById('aiArchPrompt');
     const prompt = promptField.value.trim();
     if (!prompt) return alert("Please describe your server architecture first.");
@@ -406,7 +412,10 @@ async function executeAiBuild() {
 }
 
 async function aiAutoLink() {
-    if (!Dashboard.activeGuild) return;
+    if (!Dashboard.activeGuild) {
+        alert("🛡️ PROTOCOL DENIED: Select a server from the 'SERVERS' tab first.");
+        return;
+    }
     const btn = event.target;
     const oldText = btn.innerHTML;
     btn.innerHTML = "<i class='fas fa-spinner fa-spin'></i> AI AUDITING SERVER...";
