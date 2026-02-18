@@ -344,6 +344,11 @@ async def get_gemini_response(prompt, user_id, username=None, image_bytes=None, 
         asyncio.create_task(reflect_on_user(user_id, username, user_question, result_text))
         return result_text
     except Exception as e:
+        err_str = str(e).lower()
+        if "429" in err_str or "quota" in err_str or "resource_exhausted" in err_str:
+            logger.error(f"Brain Rate Limited: {e}")
+            return "system's tapped out on juice (rate limit). try again in like 30 seconds."
+        
         logger.error(f"Brain Error: {e}")
         return "my bad, brain fog. hit me up again in a second."
 
