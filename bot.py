@@ -1191,8 +1191,9 @@ async def handle_automatic_resources(message):
                 # If it's an image or sfx asset, try to find/generate and send it directly
                 is_img_asset = any(kw in search_query.lower() for kw in ['png', 'jpg', 'image', 'picture', 'art', 'cloud', 'smoke', 'fire', 'flare', 'overlay', 'texture', 'asset', 'background'])
                 is_sfx_asset = any(kw in search_query.lower() for kw in ['sfx', 'sound', 'audio', 'mp3', 'wav', 'noise', 'effect'])
+                is_video_asset = any(kw in search_query.lower() for kw in ['video', 'song', 'music', 'track', 'phonk', 'beat', 'clip', 'yt'])
                 
-                if is_img_asset or is_sfx_asset:
+                if is_img_asset or is_sfx_asset or is_video_asset:
                     file_path = None
                     if is_img_asset:
                         is_atmospheric = any(kw in search_query.lower() for kw in ['cloud', 'fire', 'smoke', 'flare', 'light', 'sky', 'stars', 'galaxy'])
@@ -1204,6 +1205,18 @@ async def handle_automatic_resources(message):
                     
                     elif is_sfx_asset:
                         file_path = await search_and_download_audio(search_query)
+
+                    elif is_video_asset:
+                        # For videos/music, we send links instead of downloading large files
+                        yt_results = await brain.search_youtube_videos(search_query)
+                        if yt_results:
+                            res = yt_results[0]
+                            await status_msg.edit(content=f"✅ **Found it.** Fulfilling your request for **{search_query}**.")
+                            embed = discord.Embed(title=f"🎬 {res['title']}", url=res['link'], color=0xFF0000)
+                            embed.set_thumbnail(url=res['thumbnail'])
+                            embed.set_footer(text="YouTube Data Engine • Prime Proactive")
+                            await message.reply(content=f"here's the **{search_query}** you needed. hope it hits.\n🔗 {res['link']}", embed=embed, view=FindMoreImageView(search_query))
+                            return True
                     
                     if file_path and os.path.exists(file_path):
                         await status_msg.edit(content=f"✅ **Found it.** Fulfilling your request for **{search_query}**.")
@@ -3850,6 +3863,36 @@ async def on_message(message):
                 await message.reply(f"❌ Couldn't find images for '{search_query}'")
                 return
         
+        # *** YOUTUBE VIDEO SEARCH - PRIORITY #2.6 ***
+        video_keywords = ['video', 'song', 'music', 'track', 'phonk', 'beat', 'clip', 'youtube', 'yt']
+        if has_search_word and any(kw in prompt_lower for kw in video_keywords):
+            # Extract search query
+            search_query = None
+            for word in ['gimme', 'give', 'send', 'get', 'find', 'show', 'search']:
+                if word in prompt_lower:
+                    idx = prompt_lower.find(word)
+                    rest = prompt_lower[idx + len(word):].strip()
+                    if rest.startswith('me'): rest = rest[2:].strip()
+                    if rest:
+                        search_query = rest
+                        break
+            
+            if search_query:
+                async with message.channel.typing():
+                    try:
+                        yt_results = await brain.search_youtube_videos(search_query)
+                        if yt_results:
+                            res = yt_results[0]
+                            embed = discord.Embed(title=f"🎬 {res['title']}", url=res['link'], color=0xFF0000)
+                            embed.set_thumbnail(url=res['thumbnail'])
+                            embed.set_footer(text="YouTube Data Engine • Prime Search")
+                            await message.reply(content=f"here's the **{search_query}** you wanted.\n🔗 {res['link']}", embed=embed, view=FindMoreImageView(search_query))
+                            return
+                    except Exception as e:
+                        logger.error(f"YT Video Search error: {str(e)}")
+                await message.reply(f"❌ Couldn't find any videos for '{search_query}'.")
+                return
+
         # *** YOUTUBE STATS - PRIORITY #2.5 ***
         if ('stats' in prompt_lower and ('yt' in prompt_lower or 'youtube' in prompt_lower or 'channel' in prompt_lower)):
             # Extract channel name

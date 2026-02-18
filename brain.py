@@ -548,3 +548,37 @@ async def get_youtube_stats(channel_name):
     except Exception as e:
         logger.error(f"YouTube Stats Error: {e}")
         return None
+
+async def search_youtube_videos(query, max_results=1):
+    """Search for real YouTube videos/music and return their links and titles."""
+    api_key = os.getenv("YOUTUBE_API_KEY")
+    if not api_key:
+        return []
+    
+    url = "https://www.googleapis.com/youtube/v3/search"
+    params = {
+        'part': 'snippet',
+        'q': query,
+        'type': 'video',
+        'maxResults': max_results,
+        'key': api_key
+    }
+    
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, params=params) as response:
+                if response.status != 200:
+                    return []
+                
+                data = await response.json()
+                results = []
+                for item in data.get('items', []):
+                    results.append({
+                        'title': item['snippet']['title'],
+                        'link': f"https://www.youtube.com/watch?v={item['id']['videoId']}",
+                        'thumbnail': item['snippet']['thumbnails']['high']['url']
+                    })
+                return results
+    except Exception as e:
+        logger.error(f"YouTube Search Error: {e}")
+        return []
