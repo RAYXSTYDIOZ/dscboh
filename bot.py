@@ -3778,8 +3778,8 @@ async def on_message(message):
         help_words = ['help', 'tutorial', 'how to', 'teach', 'guide', 'learn', 'explain', 'show me', 'assist', 'how do i', 'how can i', 'how do you', 'create', 'make', 'how do', 'show me']
         is_help = any(re.search(r'\b' + re.escape(word) + r'\b', prompt_lower) for word in help_words)
         
-        editing_kws = ['edit', 'effect', 'render', 'color', 'grade', 'video', 'after effects', 'premiere', 'photoshop', 'resolve', 'capcut', 'topaz', 'cc', 'grading', 'correction', 'effects', 'transition', 'animation', 'vfx', 'motion']
-        is_editing_help = is_help and any(re.search(r'\b' + re.escape(kw) + r'\b', prompt_lower) for word in editing_kws)
+        editing_kws = ['edit', 'effect', 'render', 'color', 'grade', 'video', 'after effects', 'ae', 'premiere', 'pr', 'photoshop', 'ps', 'resolve', 'davinci', 'capcut', 'topaz', 'cc', 'grading', 'correction', 'effects', 'transition', 'animation', 'vfx', 'motion', 'mask', 'keyframe']
+        is_editing_help = is_help and any(re.search(r'\b' + re.escape(kw) + r'\b', prompt_lower) for kw in editing_kws)
         
         # PRIORITY: If this is editing help, ALWAYS ask which software FIRST before generating anything
         if is_editing_help:
