@@ -2957,10 +2957,10 @@ async def on_ready():
         except Exception as e:
             logger.error(f"Failed to sync commands: {e}")
 
-        # Start background tasks
-        if not revive_chat.is_running(): revive_chat.start()
-        if not daily_insight.is_running(): daily_insight.start()
-        if not creative_pulse.is_running(): creative_pulse.start()
+        # Start background tasks (Unsolicited messages disabled by default)
+        # if not revive_chat.is_running(): revive_chat.start()
+        # if not daily_insight.is_running(): daily_insight.start()
+        # if not creative_pulse.is_running(): creative_pulse.start()
         if not check_account_maturity.is_running(): check_account_maturity.start()
 
         # Global startup log
@@ -3668,25 +3668,26 @@ async def on_message(message):
     if await check_and_moderate_spam(message):
         return
     
+    # --- CONVERSATIONAL AUTOMATION (Currently Disabled to prevent 'random' messages) ---
     # Check for political/chaotic conversation flow (RUN IN BACKGROUND - NON-BLOCKING)
-    asyncio.create_task(moderate_topic_and_vibe(message))
+    # asyncio.create_task(moderate_topic_and_vibe(message))
     
     # Check server security (invites, suspicious behavior) (RUN IN BACKGROUND - NON-BLOCKING)
     asyncio.create_task(check_server_security(message))
     
     # Trigger AI feedback on WIPs/Media automatically
-    if await handle_automatic_media_review(message):
-        return
+    # if await handle_automatic_media_review(message):
+    #     return
         
     # Trigger AI resource suggestions automatically
-    if await handle_automatic_resources(message):
-        return
+    # if await handle_automatic_resources(message):
+    #    return
 
     # Extra catch: If they are asking for an asset/file but the above didn't catch it
-    if any(kw in message.content.lower() for kw in ['png', 'asset', 'send me', 'give me', 'find me']) and ('cloud' in message.content.lower() or 'overlay' in message.content.lower() or 'sfx' in message.content.lower()):
-        # Force the resource handler to run even if keywords/triggers were loose
-        if await handle_automatic_resources(message):
-            return
+    # if any(kw in message.content.lower() for kw in ['png', 'asset', 'send me', 'give me', 'find me']) and ('cloud' in message.content.lower() or 'overlay' in message.content.lower() or 'sfx' in message.content.lower()):
+    #     # Force the resource handler to run even if keywords/triggers were loose
+    #     if await handle_automatic_resources(message):
+    #         return
         
     # Trigger AI role suggestions if they mention software they don't have a role for
     # if await handle_automatic_role_suggestion(message):

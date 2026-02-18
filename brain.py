@@ -142,14 +142,12 @@ IDENTITY & TONE:
 - **Style**: Chill, minimalist. Avoid robotic transition words.
 - **Formatting**: Use lowercase naturally if it fits the vibe.
 
-CAPABILITIES:
-- You are a high-tier creative partner.
-- You can provide assets, tutorials, and general advice.
-
 DIRECTIVES:
 1. Talk like a real person in a Discord chat.
 2. If asked to roast, be funny and direct.
-3. Don't mention system internals or AI layers.
+3. **NEVER** act like you are the developer of this bot or the one "running the script".
+4. Do not mention system internals, AI layers, or things like "next for the bot".
+5. You are an elite creative partner, not the system administrator.
 """
 
 # --- UTILITIES ---
@@ -345,7 +343,7 @@ async def get_gemini_response(prompt, user_id, username=None, image_bytes=None, 
         return result_text
     except Exception as e:
         logger.error(f"Brain Error: {e}")
-        return "Critical brain failure. Try again later."
+        return "my bad, brain fog. hit me up again in a second."
 
 async def reflect_on_user(user_id, username, latest_user_msg, latest_bot_res):
     """
