@@ -2051,7 +2051,25 @@ async def search_and_download_image(query: str, limit: int = 1):
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
         }
         
-        # Method 1: Unsplash API (very reliable for random images)
+        # Method 1: Google Image Search (via Serper) - MOST ACCURATE
+        try:
+            logger.info(f"Trying Google Image Search for: {query}")
+            img_url = await brain.search_images_google(query)
+            if img_url:
+                async with aiohttp.ClientSession() as session:
+                    async with session.get(img_url, timeout=10) as response:
+                        if response.status == 200:
+                            content = await response.read()
+                            if len(content) > 1000:
+                                temp_file = tempfile.NamedTemporaryFile(suffix='.jpg', delete=False)
+                                temp_file.write(content)
+                                temp_file.close()
+                                logger.info(f"✓ Downloaded image from Google for: {query}")
+                                return temp_file.name
+        except Exception as e:
+            logger.warning(f"Google Image Search failed: {str(e)}")
+
+        # Method 2: Unsplash API (fallback)
         try:
             # Clean the query
             safe_query = query.replace(' ', '+')
@@ -2068,21 +2086,6 @@ async def search_and_download_image(query: str, limit: int = 1):
                 return temp_file.name
         except Exception as e:
             logger.warning(f"Unsplash failed: {str(e)}")
-        
-        # Method 2: Picsum Photos (very reliable)
-        try:
-            logger.info(f"Trying Picsum for: {query}")
-            picsum_url = f"https://picsum.photos/800/600?random={hash(query)}"
-            response = requests.get(picsum_url, headers=headers, timeout=10)
-            
-            if response.status_code == 200 and len(response.content) > 1000:
-                temp_file = tempfile.NamedTemporaryFile(suffix='.jpg', delete=False)
-                temp_file.write(response.content)
-                temp_file.close()
-                logger.info(f"✓ Downloaded image from Picsum for: {query}")
-                return temp_file.name
-        except Exception as e:
-            logger.warning(f"Picsum failed: {str(e)}")
         
         # Method 3: Placeholder with image text overlay as fallback
         try:
@@ -3762,7 +3765,7 @@ async def on_message(message):
                 try:
                     image_path = await search_and_download_image(search_query, limit=1)
                     if image_path and os.path.exists(image_path):
-                        await message.channel.send(f"{message.author.mention}, here's your **{search_query}**:", file=discord.File(image_path))
+                        await message.channel.send(f"fulfilled your request. found/created this **{search_query}** for you.", file=discord.File(image_path))
                         return
                 except Exception as e:
                     logger.error(f"Image search error: {str(e)}")

@@ -460,3 +460,24 @@ async def search_google(query):
     except Exception as e:
         logger.error(f"Google search error: {e}")
     return []
+
+async def search_images_google(query):
+    """Search for images via Serper API and return the top image URL."""
+    api_key = os.getenv("SERPER_API_KEY")
+    if not api_key:
+        return None
+    
+    url = "https://google.serper.dev/images"
+    payload = json.dumps({"q": query})
+    headers = {'X-API-KEY': api_key, 'Content-Type': 'application/json'}
+    
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.post(url, headers=headers, data=payload) as response:
+                res_data = await response.json()
+                images = res_data.get('images', [])
+                if images:
+                    return images[0].get('imageUrl')
+    except Exception as e:
+        logger.error(f"Google image search error: {e}")
+    return None
