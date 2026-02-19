@@ -3863,6 +3863,29 @@ async def on_message(message):
                 await message.reply(f"❌ Couldn't find images for '{search_query}'")
                 return
         
+        # *** DISCORD PFP - PRIORITY #2.1 ***
+        pfp_keywords = ['pfp', 'avatar', 'profile picture', 'profile pic']
+        if any(kw in prompt_lower for kw in pfp_keywords) and ('show' in prompt_lower or 'get' in prompt_lower or 'give' in prompt_lower or 'send' in prompt_lower or 'view' in prompt_lower):
+            target_user = message.author
+            if message.mentions:
+                # Pick the first mention that isn't the bot itself
+                mentions = [u for u in message.mentions if u.id != bot.user.id]
+                if mentions:
+                    target_user = mentions[0]
+            
+            async with message.channel.typing():
+                try:
+                    avatar_url = target_user.display_avatar.url
+                    embed = discord.Embed(title=f"👤 {target_user.name}'s Profile Picture", color=discord.Color.blue())
+                    embed.set_image(url=avatar_url)
+                    embed.set_footer(text=f"Requested by {message.author.name} • Nexus Intelligence")
+                    await message.reply(embed=embed)
+                    return
+                except Exception as e:
+                    logger.error(f"PFP Error: {e}")
+                    await message.reply("❌ Error fetching the profile picture.")
+                    return
+        
         # *** YOUTUBE VIDEO SEARCH - PRIORITY #2.6 ***
         video_keywords = ['video', 'song', 'music', 'track', 'phonk', 'beat', 'clip', 'youtube', 'yt']
         if has_search_word and any(kw in prompt_lower for kw in video_keywords):
