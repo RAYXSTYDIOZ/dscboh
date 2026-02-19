@@ -3950,6 +3950,32 @@ async def on_message(message):
                 except Exception as e:
                     logger.error(f"Expression Ghost Error: {e}")
         
+        # *** DECISION ARCHITECT - PRIORITY #2.16 ***
+        decision_keywords = ['decide', 'choose', 'choice', 'better', 'comparison', 'compare', 'which one', 'should i', 'buy', 'get']
+        if any(kw in prompt_lower for kw in decision_keywords) and ('help' in prompt_lower or 'me' in prompt_lower or 'decide' in prompt_lower or 'compare' in prompt_lower):
+            async with message.channel.typing():
+                try:
+                    # Search for real-time market/tech data to backup the decision
+                    search_results = await brain.search_google(f"{message.content} pros and cons comparison")
+                    context = ""
+                    if search_results:
+                        context = "\n\nREAL-TIME RESEARCH DATA:\n" + "\n".join([f"- {r['title']}: {r['link']}" for r in search_results[:2]])
+                    
+                    decision_prompt = f"Act as a Strategic Consultant. Help the user decide on: '{message.content}'. {context} Provide a logical comparison with Pros, Cons, and a Final Weighted Recommendation. Be decisive."
+                    decision_res = await brain.safe_generate_content(model=PRIMARY_MODEL, contents=[decision_prompt])
+                    decision_text = decision_res.text if decision_res and hasattr(decision_res, 'text') else "❌ Could not calculate decision."
+                    
+                    embed = discord.Embed(
+                        title="⚖️ Decision Architect | Strategic Analysis", 
+                        color=0xFFCC00, # Amber/Gold for high priority
+                        description=decision_text
+                    )
+                    embed.set_footer(text="Prime Intelligence • Logical Processing")
+                    await message.reply(embed=embed)
+                    return
+                except Exception as e:
+                    logger.error(f"Decision Architect Error: {e}")
+        
         # *** YOUTUBE VIDEO SEARCH - PRIORITY #2.6 ***
         video_keywords = ['video', 'song', 'music', 'track', 'phonk', 'beat', 'clip', 'youtube', 'yt', 'ep', 'episode', 'series', 'part', 'movie']
         if (has_search_word or any(k in prompt_lower for k in ['ep', 'episode', 'part'])) and any(kw in prompt_lower for kw in video_keywords):
