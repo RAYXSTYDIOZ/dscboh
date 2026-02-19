@@ -29,6 +29,7 @@ from typing import Dict, List, Set, Tuple, Optional
 import hashlib
 import json
 import yt_dlp
+import zipfile
 
 # Set up logger with console output
 logging.basicConfig(
@@ -7073,6 +7074,74 @@ async def expression_sandbox(ctx, *, expression: str = None):
             embed.set_footer(text="Prime | AE Sandbox")
             await ctx.send(embed=embed)
         except Exception as e:
+            await ctx.send(BOT_ERROR_MSG)
+
+@bot.command(name="architect")
+async def architect_command(ctx, *, project_desc: str = None):
+    """Autonomous Project Zipping. Build full applications and get a ZIP."""
+    if not project_desc:
+        await ctx.send("🏗️ **Usage**: `!architect [project description]` (e.g., !architect simple landing page with dark mode)")
+        return
+    
+    async with ctx.typing():
+        try:
+            prompt = f"ARCHITECT MODE: Build a full multi-file project for: '{project_desc}'. Provide the output as a SINGLE JSON object where keys are filenames and values are the file contents. Wrap it in ```json blocks."
+            response = await get_gemini_response(prompt, ctx.author.id, username=ctx.author.name, guild_id=ctx.guild.id if ctx.guild else None)
+            
+            # Extract JSON
+            json_match = re.search(r'```json\s*(\{.*?\})\s*```', response, re.DOTALL)
+            if not json_match:
+                # Fallback: maybe just regular code block with one file?
+                await ctx.send(response[:2000])
+                return
+            
+            project_data = json.loads(json_match.group(1))
+            
+            # Create ZIP
+            zip_buffer = io.BytesIO()
+            with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+                for filename, content in project_data.items():
+                    # Handle if filename has path separators
+                    zip_file.writestr(filename, content)
+            
+            zip_buffer.seek(0)
+            
+            embed = discord.Embed(
+                title="📦 PROJECT ARCHITECTED",
+                description=f"Successfully built the framework for: **{project_desc}**.\n\nFiles generated: " + ", ".join([f"`{f}`" for f in project_data.keys()]),
+                color=0x00FFB4
+            )
+            embed.set_footer(text="Prime | Project Blueprint")
+            
+            await ctx.send(embed=embed, file=discord.File(fp=zip_buffer, filename=f"project_{os.urandom(2).hex()}.zip"))
+            
+        except Exception as e:
+            logger.error(f"Architect Error: {e}")
+            await ctx.send(f"❌ **Architect Error**: Failed to compile the repository. (Check if your prompt is too complex)")
+
+@bot.command(name="intel")
+async def intelligence_scout(ctx, *, query: str = None):
+    """Deep Intelligence Scouting. Find leaks, whispers, and insider info."""
+    if not query:
+        await ctx.send("🛰️ **Usage**: `!intel [leak/topic]` (e.g., !intel After Effects 2026 features)")
+        return
+    
+    async with ctx.typing():
+        try:
+            # Use Intel Scout directive logic
+            prompt = f"INTELLIGENCE SCOUT: Scour the latest whispers, GitHub commits, and community leaks for: '{query}'. Provide a high-intelligence report with the most likely upcoming features or data."
+            response = await get_gemini_response(prompt, ctx.author.id, username=ctx.author.name, guild_id=ctx.guild.id if ctx.guild else None)
+            
+            embed = discord.Embed(
+                title=f"🛰️ INTELLIGENCE REPORT: {query.upper()}",
+                description=response[:4000],
+                color=0x00FFB4,
+                timestamp=datetime.now(timezone.utc)
+            )
+            embed.set_footer(text="Prime | Global Intelligence Harvest")
+            await ctx.send(embed=embed)
+        except Exception as e:
+            logger.error(f"Intel Error: {e}")
             await ctx.send(BOT_ERROR_MSG)
 
 @bot.command(name="override")
