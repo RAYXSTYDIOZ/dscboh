@@ -3820,34 +3820,48 @@ async def on_message(message):
         # *** PROJECT ARCHITECT (AUTO-ZIP) - PRIORITY #0.5 ***
         architect_keywords = ['project', 'app', 'website', 'repository', 'zip', 'framework', 'system']
         if any(w in prompt_lower for w in ['build', 'architect', 'generate', 'make']) and any(kw in prompt_lower for kw in architect_keywords):
+            status_msg = await message.reply("🏗️ **Prime Architect**: Designing your system architecture...")
             async with message.channel.typing():
                 try:
                     project_desc = message.content.replace(f'<@{bot.user.id}>', '').strip()
-                    prompt = f"ARCHITECT MODE: Build a full multi-file project for: '{project_desc}'. Provide the output as a SINGLE JSON object where keys are filenames and values are the file contents. Wrap it in ```json blocks."
+                    prompt = f"ARCHITECT MODE: Build a full multi-file project for: '{project_desc}'. Provide the output as a SINGLE JSON object where keys are filenames and values are the file contents. Wrap the result in ```json blocks. DO NOT provide any other text outside the json block."
                     response = await get_gemini_response(prompt, user_id, username=message.author.name, guild_id=message.guild.id if message.guild else None)
                     
-                    json_match = re.search(r'```json\s*(\{.*?\})\s*```', response, re.DOTALL)
+                    # More robust JSON extraction (greedy to handle nested braces)
+                    json_match = re.search(r'```json\s*(\{[\s\S]*\})\s*```', response)
                     if not json_match:
-                        # Fallback to chat
-                        pass
+                        # Attempt to find JSON outside blocks if AI failed formatting
+                        json_match = re.search(r'(\{[\s\S]*\})', response)
+                    
+                    if json_match:
+                        try:
+                            project_data = json.loads(json_match.group(1))
+                            zip_buffer = io.BytesIO()
+                            with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+                                for filename, content in project_data.items():
+                                    zip_file.writestr(filename, content)
+                            
+                            zip_buffer.seek(0)
+                            embed = discord.Embed(
+                                title="📦 PROJECT ARCHITECTED",
+                                description=f"Successfully built the framework for: **{project_desc}**.\n\nStructure optimized for production.",
+                                color=0x00FFB4
+                            )
+                            embed.add_field(name="📂 Master Repository", value=", ".join([f"`{f}`" for f in list(project_data.keys())[:10]]) + (f" (+{len(project_data)-10} more)" if len(project_data) > 10 else ""), inline=False)
+                            embed.set_footer(text="Prime Intelligence • Project Blueprint")
+                            
+                            await status_msg.delete()
+                            await message.reply(embed=embed, file=discord.File(fp=zip_buffer, filename=f"project_{os.urandom(2).hex()}.zip"))
+                            return
+                        except Exception as json_e:
+                            logger.error(f"JSON Parse Error in Architect: {json_e}")
+                            await status_msg.edit(content="⚠️ **Architect Error**: The AI generated a complex structure but the data format was corrupt. Trying to deliver as a regular file...")
                     else:
-                        project_data = json.loads(json_match.group(1))
-                        zip_buffer = io.BytesIO()
-                        with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
-                            for filename, content in project_data.items():
-                                zip_file.writestr(filename, content)
-                        
-                        zip_buffer.seek(0)
-                        embed = discord.Embed(
-                            title="📦 PROJECT ARCHITECTED",
-                            description=f"Successfully built the framework for: **{project_desc}**.\n\nFiles generated: " + ", ".join([f"`{f}`" for f in project_data.keys()]),
-                            color=0x00FFB4
-                        )
-                        embed.set_footer(text="Prime | Project Blueprint")
-                        await message.reply(embed=embed, file=discord.File(fp=zip_buffer, filename=f"project_{os.urandom(2).hex()}.zip"))
-                        return
+                        await status_msg.edit(content="⚠️ **Architect Error**: Could not reconstruct a valid multi-file structure. Sending regular response...")
                 except Exception as e:
                     logger.error(f"Auto-Architect Error: {e}")
+                    try: await status_msg.delete()
+                    except: pass
 
         # *** IMAGE GENERATION - PRIORITY #1 ***
         if ('generat' in prompt_lower or 'creat' in prompt_lower or 'draw' in prompt_lower or 'make' in prompt_lower) and ('img' in prompt_lower or 'image' in prompt_lower or 'picture' in prompt_lower or 'photo' in prompt_lower or 'art' in prompt_lower):
