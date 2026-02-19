@@ -3930,6 +3930,26 @@ async def on_message(message):
                     await message.reply("❌ Error syncing the identity data.")
                     return
         
+        # *** AE EXPRESSION GHOST - PRIORITY #2.15 ***
+        ae_expr_keywords = ['expression', 'ae code', 'after effects code', 'wiggle', 'bounce', 'loopout', 'posterize', 'smooth', 'velocity code', 'shake expression', 'script code']
+        if any(kw in prompt_lower for kw in ae_expr_keywords) and ('how to' in prompt_lower or 'give' in prompt_lower or 'get' in prompt_lower or 'show' in prompt_lower or 'code' in prompt_lower or 'expression' in prompt_lower or 'script' in prompt_lower):
+            async with message.channel.typing():
+                try:
+                    ghost_prompt = f"Act as an After Effects Technical Expert. Provide only the JavaScript expression code for: '{message.content}'. Briefly explain how to apply it (e.g., 'Alt-Click the Position stopwatch'). Keep it high-end and minimalist. No fluff. Wrap the code in a clean markdown block."
+                    ghost_res = await brain.safe_generate_content(model=PRIMARY_MODEL, contents=[ghost_prompt])
+                    ghost_text = ghost_res.text if ghost_res and hasattr(ghost_res, 'text') else "❌ Could not generate expression."
+                    
+                    embed = discord.Embed(
+                        title="👻 Expression Ghost | AE Technical Support", 
+                        color=0x9966FF,
+                        description=ghost_text
+                    )
+                    embed.set_footer(text="Prime Intelligence • Creative Engineering")
+                    await message.reply(embed=embed)
+                    return
+                except Exception as e:
+                    logger.error(f"Expression Ghost Error: {e}")
+        
         # *** YOUTUBE VIDEO SEARCH - PRIORITY #2.6 ***
         video_keywords = ['video', 'song', 'music', 'track', 'phonk', 'beat', 'clip', 'youtube', 'yt', 'ep', 'episode', 'series', 'part', 'movie']
         if (has_search_word or any(k in prompt_lower for k in ['ep', 'episode', 'part'])) and any(kw in prompt_lower for kw in video_keywords):
