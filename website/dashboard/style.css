@@ -991,3 +991,68 @@ body.authenticated .os-container {
     transform: scale(1.05);
     filter: brightness(1.1);
 }
+
+/* --- LOG CONSOLE --- */
+.log-console {
+    background: #050505;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 2rem;
+    height: 500px;
+    overflow-y: auto;
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 0.8rem;
+    color: rgba(255, 255, 255, 0.7);
+    line-height: 1.6;
+}
+
+.log-entry {
+    margin-bottom: 0.5rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.02);
+}
+
+.log-entry b {
+    color: var(--p);
+}
+
+/* --- ANALYTICS CHARTS --- */
+.chart-sim {
+    margin-top: 2rem;
+    height: 60px;
+    display: flex;
+    align-items: flex-end;
+    gap: 4px;
+}
+
+.chart-sim .bar {
+    flex: 1;
+    background: var(--p);
+    opacity: 0.2;
+    border-radius: 2px;
+    transition: 0.3s;
+}
+
+.chart-sim .bar:hover {
+    opacity: 1;
+    filter: drop-shadow(0 0 10px var(--p));
+}
+
+/* --- GHOST SCROLLBARS --- */
+::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+
+::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: var(--p);
+}

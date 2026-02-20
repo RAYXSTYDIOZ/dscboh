@@ -167,8 +167,32 @@ async def dash_stats(request: Request):
                 user_count = cursor.fetchone()[0]
                 cursor.execute("SELECT COUNT(*) FROM conversation_history")
                 msg_count = cursor.fetchone()[0]
-                return {"users": user_count, "messages": msg_count, "status": "Healthy", "bot_servers": len(BOT_GUILDS)}
-    except: return {"error": "DB Error"}
+                
+                # Fetch Real Leaderboard
+                cursor.execute("SELECT user_id, xp, level FROM user_levels ORDER BY xp DESC LIMIT 5")
+                lb_rows = cursor.fetchall()
+                leaderboard = []
+                for row in lb_rows:
+                    # Try to find username in user_memory
+                    cursor.execute("SELECT username FROM user_memory WHERE user_id = %s" if db_manager.is_postgres else "SELECT username FROM user_memory WHERE user_id = ?", (row[0],))
+                    u_row = cursor.fetchone()
+                    leaderboard.append({
+                        "id": row[0],
+                        "xp": row[1],
+                        "level": row[2],
+                        "username": u_row[0] if u_row else f"USER_{str(row[0])[-4:]}"
+                    })
+
+                return {
+                    "users": user_count, 
+                    "messages": msg_count, 
+                    "status": "Healthy", 
+                    "bot_servers": len(BOT_GUILDS),
+                    "leaderboard": leaderboard
+                }
+    except Exception as e: 
+        logger.error(f"Dash Stats Error: {e}")
+        return {"error": "DB Error"}
 
 @app.get("/api/guilds/{guild_id}/settings")
 async def get_settings(guild_id: str, request: Request):

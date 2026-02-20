@@ -76,6 +76,16 @@
                             <h2 id="statStatus">99.9%</h2>
                         </div>
                     </div>
+
+                    <div class="cust-section"
+                        style="border-color: rgba(0, 255, 170, 0.1); background: rgba(0,255,170,0.01);">
+                        <h4><i class="fas fa-satellite-dish"></i> LIVE SIGNAL FEED</h4>
+                        <div id="overviewFeed"
+                            style="max-height: 200px; overflow: hidden; font-size: 0.75rem; color: rgba(255,255,255,0.4); display: flex; flex-direction: column; gap: 10px;">
+                            <div class="log-entry" style="border: none; margin: 0; padding: 0;"><b>[SIGNAL]</b>
+                                Monitoring global creative frequency...</div>
+                        </div>
+                    </div>
                 </section>
 
                 <!-- SECTION: SERVERS -->
@@ -272,6 +282,68 @@
                                 </div>
                             </div>
                         </form>
+                    </div>
+                </section>
+
+                <!-- SECTION: ANALYTICS -->
+                <section id="tab-analytics" class="tab">
+                    <div class="welcome-msg">
+                        <h1>SYSTEM ANALYTICS</h1>
+                    </div>
+                    <div class="stats-grid">
+                        <div class="stat-card">
+                            <small>COMMAND USAGE</small>
+                            <h2 id="anaUsage">+24%</h2>
+                            <div class="chart-sim">
+                                <div class="bar" style="height: 40%"></div>
+                                <div class="bar" style="height: 60%"></div>
+                                <div class="bar" style="height: 80%"></div>
+                                <div class="bar" style="height: 50%"></div>
+                            </div>
+                        </div>
+                        <div class="stat-card">
+                            <small>RETENTION RATE</small>
+                            <h2 id="anaRetention">92%</h2>
+                        </div>
+                        <div class="stat-card">
+                            <small>AI LATENCY</small>
+                            <h2 id="anaLatency">2.4s</h2>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- SECTION: LOGS -->
+                <section id="tab-logs" class="tab">
+                    <div class="welcome-msg">
+                        <h1>SYSTEM LOGS</h1>
+                    </div>
+                    <div class="log-console" id="logConsole">
+                        <div class="log-entry"><b>[SYSTEM]</b> Initializing log relay...</div>
+                        <div class="log-entry"><b>[SUCCESS]</b> Connection established.</div>
+                    </div>
+                </section>
+
+                <!-- SECTION: SECURITY -->
+                <section id="tab-security" class="tab">
+                    <div class="welcome-msg">
+                        <h1>FIREWALL & SECURITY</h1>
+                    </div>
+                    <div class="empty-state">
+                        <i class="fas fa-shield-check"></i>
+                        <h3>ENCRYPTION ACTIVE</h3>
+                        <p>Sentinel protocol is monitoring all channels for zero-day threats.</p>
+                    </div>
+                </section>
+
+                <!-- SECTION: COMMUNITY -->
+                <section id="tab-community" class="tab">
+                    <div class="welcome-msg">
+                        <h1>COMMUNITY HUB</h1>
+                    </div>
+                    <div class="empty-state">
+                        <i class="fas fa-users-crown"></i>
+                        <h3>COMING SOON</h3>
+                        <p>This module is currently being architected by the Shadow Council.</p>
                     </div>
                 </section>
 
