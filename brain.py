@@ -393,6 +393,64 @@ async def get_gemini_response(prompt, user_id, username=None, image_bytes=None, 
         logger.error(f"Brain Error: {e}")
         return "my bad, brain fog. hit me up again in a second."
 
+async def get_council_response(prompt, user_id, username=None, guild_id=None):
+    """
+    Shadow Council Protocol: Multi-agent internal debate.
+    Orchestrates Architect, Aestheticist, and Strategist agents.
+    """
+    try:
+        # 1. Council Personas
+        ARCHITECT_PROMPT = "Persona: THE ARCHITECT. Focus on logic, security, clean code, and engineering. Identify technical risks."
+        AESTHETICIST_PROMPT = "Persona: THE AESTHETICIST. Focus on UI/UX, premium visuals, glassmorphism, animations, and high-end aesthetics."
+        STRATEGIST_PROMPT = "Persona: THE STRATEGIST. Focus on user value, viral potential, business logic, and 'hype' factor."
+
+        # 2. Build the Debate Instruction
+        debate_instruction = f"""
+SHADOW COUNCIL PROTOCOL ACTIVE.
+USER REQUEST: "{prompt}"
+
+INSTRUCTIONS:
+You are orchestrating a council of three elite agents.
+1. INTERNAL DEBATE: Perform an internal analysis as:
+   - THE ARCHITECT (Logic/Engineering)
+   - THE AESTHETICIST (Visuals/Design)
+   - THE STRATEGIST (Value/User Flow)
+
+2. SYNTHESIS: Provide a single, unified, high-tier response. 
+   - If the user asked for code, the code must be perfected by all three (Clean logic + Beautiful UI comments + User-centric features).
+   - If it's a creative request, it must be strategically sound and visually stunning.
+
+3. OUTPUT FORMAT:
+   - Your final message should be the synthesized solution.
+   - At the bottom, include a small 'COUNCIL AUDIT' block:
+     [ Architect: ✅ | Aestheticist: ✨ | Strategist: 🚀 ]
+
+Keep the tone elite and confident. Don't mention it's an AI simulation; just deliver the multi-dimensional result.
+"""
+        # 3. Use Groq for lightning speed if available, otherwise fallback to Gemini
+        if GROQ_API_KEY:
+            logger.info("🕵️ COUNCIL: Routing debate to Groq (Llama 70B) for speed.")
+            response = await get_groq_response(
+                prompt=debate_instruction,
+                system_prompt="You are the Prime Shadow Council Orchestrator. Deliver the synthesized multi-agent result."
+            )
+            if response:
+                return response
+
+        # Gemini Fallback if Groq fails or is missing
+        logger.info("🕵️ COUNCIL: Routing to Gemini.")
+        response = await get_gemini_response(
+            prompt=debate_instruction,
+            user_id=user_id,
+            username=username,
+            guild_id=guild_id,
+            mode="council"
+        )
+        return response
+    except Exception as e:
+        logger.error(f"Council Error: {e}")
+        return await get_gemini_response(prompt, user_id, username, guild_id=guild_id)
+
 async def reflect_on_user(user_id, username, latest_user_msg, latest_bot_res):
     """
     Asks the AI to 'reflect' on the interaction and update its long-term memory of the user.

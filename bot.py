@@ -3817,6 +3817,26 @@ async def on_message(message):
     if not message.content.startswith('!'):
         prompt_lower = message.content.lower()
         
+        # *** SHADOW COUNCIL (MULTI-AGENT REVIEW) - PRIORITY #0.1 ***
+        council_triggers = ['council', 'review', 'deep audit', 'analyze deeply', 'expert opinion', 'shadow council']
+        if any(kw in prompt_lower for kw in council_triggers) or (len(prompt_lower) > 100 and any(w in prompt_lower for w in ['build', 'create', 'design']) and 'insane' in prompt_lower):
+            status_msg = await message.reply("🕵️ **Shadow Council**: Summoning the Architect, Aestheticist, and Strategist...")
+            async with message.channel.typing():
+                try:
+                    analysis = await brain.get_council_response(
+                        prompt=message.content.replace(f'<@{bot.user.id}>', '').strip(),
+                        user_id=user_id,
+                        username=message.author.name,
+                        guild_id=message.guild.id if message.guild else None
+                    )
+                    await status_msg.delete()
+                    await message.reply(analysis)
+                    return
+                except Exception as e:
+                    logger.error(f"Council Trigger Error: {e}")
+                    try: await status_msg.delete()
+                    except: pass
+        
         # *** PROJECT ARCHITECT (AUTO-ZIP) - PRIORITY #0.5 ***
         architect_keywords = ['project', 'app', 'website', 'repository', 'zip', 'framework', 'system']
         if any(w in prompt_lower for w in ['build', 'architect', 'generate', 'make']) and any(kw in prompt_lower for kw in architect_keywords):
